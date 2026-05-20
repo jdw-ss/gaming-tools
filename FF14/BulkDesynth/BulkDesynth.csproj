@@ -8,12 +8,13 @@
 
     Targets net10.0-windows because Dalamud 14.x+ is built against .NET 10.
     Install the .NET 10 SDK from https://dotnet.microsoft.com/download/dotnet/10.0
-    if `dotnet --list-sdks` does not show a 10.x entry.
+    if the `dotnet` CLI's SDK listing command shows no 10.x entry. Note:
+    avoid double dashes inside this XML comment block; XML parsers reject them.
 
     DalamudLibPath auto-detection order:
       1. Local `.refs/` folder shipped with source (for macOS / Linux / CI).
       2. Standard %AppData%\XIVLauncher\addon\Hooks\dev\ (Windows + XIVLauncher).
-      3. Explicit override via -p:DalamudLibPath=... on the dotnet CLI.
+      3. Explicit override via the DalamudLibPath property on the dotnet CLI.
   -->
 
   <PropertyGroup>
