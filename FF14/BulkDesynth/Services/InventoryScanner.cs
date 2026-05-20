@@ -18,8 +18,9 @@ namespace BulkDesynth.Services;
 public sealed class InventoryScanner
 {
     /// <summary>Quest row ID that unlocks desynthesis. Sourced from AutoRetainer's
-    /// reference implementation; the quest is "Gone to Pieces" / equivalent.</summary>
-    private const ushort DesynthUnlockQuest = 65688;
+    /// reference implementation; the quest is "Gone to Pieces" / equivalent.
+    /// Stored as uint because the row ID exceeds ushort.MaxValue (65535).</summary>
+    private const uint DesynthUnlockQuest = 65688;
 
     /// <summary>Minimum DoH class level required to use desynthesis at all.</summary>
     private const byte MinDohLevelForDesynth = 30;
