@@ -1,0 +1,28 @@
+[
+  {
+    "Author": "John Wilson (jdw-ss)",
+    "Name": "Bulk Desynth",
+    "InternalName": "BulkDesynth",
+    "AssemblyVersion": "0.1.0.0",
+    "Description": "Queue and run bulk desynthesis jobs without clicking each item by hand. Target by item ID, bag, item-level / equipment-slot filters, or armoury chest category. Every job is dry-run first: the plugin builds a preview list of slots it intends to desynth, you click Confirm, then it walks the list one item at a time on the framework tick.\n\nUsage:\n  /bds         - open the main window\n  /bds bag <n> - preview bag N (1-4)\n  /bds item <itemId> - preview every copy of an item in inventory\n  /bds stop    - cancel a running queue\n",
+    "ApplicableVersion": "any",
+    "Tags": [
+      "desynth",
+      "desynthesis",
+      "salvage",
+      "inventory",
+      "utility"
+    ],
+    "Punchline": "Bulk-desynth items by bag, ID, or filter — dry-run preview before anything actually happens.",
+    "RepoUrl": "https://github.com/jdw-ss/gaming-tools",
+    "DalamudApiLevel": 15,
+    "AcceptsFeedback": true,
+    "DownloadLinkInstall": "https://jdw-ss.github.io/gaming-tools/ff14/bulkdesynth/latest.zip",
+    "DownloadLinkUpdate": "https://jdw-ss.github.io/gaming-tools/ff14/bulkdesynth/latest.zip",
+    "DownloadLinkTesting": "https://jdw-ss.github.io/gaming-tools/ff14/bulkdesynth/latest.zip",
+    "DownloadCount": 0,
+    "LastUpdate": 1779311334,
+    "IsHide": false,
+    "IsTestingExclusive": false
+  }
+]
