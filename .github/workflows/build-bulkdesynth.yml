@@ -116,13 +116,17 @@ jobs:
 
       - name: Commit + push (if changed)
         run: |
-          if git diff --quiet docs/ff14/bulkdesynth/; then
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Stage first so untracked-new-files are visible to the change
+          # detection. `git diff` (non --cached) only compares against
+          # tracked files, so it reports "clean" for brand-new paths and
+          # the first build would never commit anything.
+          git add docs/ff14/bulkdesynth/latest.zip docs/ff14/bulkdesynth/pluginmaster.json
+          if git diff --cached --quiet; then
             echo "docs/ff14/bulkdesynth/ unchanged - skipping commit."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/ff14/bulkdesynth/latest.zip docs/ff14/bulkdesynth/pluginmaster.json
           git commit -m "ci: rebuild BulkDesynth v${{ steps.version.outputs.semver }}" \
             -m "Auto-built on ubuntu-latest by .github/workflows/build-bulkdesynth.yml. GitHub Pages will pick up the new zip on its next deploy cycle (usually under a minute)."
           git push
