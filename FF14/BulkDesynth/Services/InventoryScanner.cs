@@ -78,7 +78,7 @@ public sealed class InventoryScanner
         foreach (var container in filter.Containers)
         {
             var inv = manager->GetInventoryContainer(container);
-            if (inv == null || inv->Loaded == 0)
+            if (inv == null || !inv->IsLoaded)
                 continue;
 
             for (short slot = 0; slot < inv->Size; slot++)

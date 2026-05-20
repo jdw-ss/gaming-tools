@@ -229,7 +229,7 @@ public sealed class DesynthExecutor : IDisposable
         var manager = InventoryManager.Instance();
         if (manager == null) return false;
         var inv = manager->GetInventoryContainer(candidate.Container);
-        if (inv == null || inv->Loaded == 0) return false;
+        if (inv == null || !inv->IsLoaded) return false;
         var slot = inv->GetInventorySlot(candidate.Slot);
         if (slot == null || slot->ItemId == 0) return false;
         // Defense in depth: only proceed if the item ID still matches. If the
