@@ -12,16 +12,14 @@ using Dalamud.Bindings.ImGui;
 namespace BulkDesynth.Windows;
 
 /// <summary>
-/// Single window that handles both filter setup and run preview / confirmation.
-///
-/// Layout is two tabs:
-///   - "Targeting" - pick scope (bag / item id / filter / armoury), hit
-///     "Build preview". The preview list shows below.
+/// Single window with three tabs:
+///   - "Targeting" - tick which containers to scan, optionally narrow with
+///     filter parameters, hit Build preview, then Desynth.
 ///   - "Run" - shows progress of the in-flight queue.
+///   - "Settings" - runtime pacing knobs.
 ///
 /// We never invoke the executor automatically. The preview must be explicitly
-/// confirmed via the "Desynth N items" button after the user has had a chance
-/// to read the candidate list.
+/// confirmed via the red "Desynth N items" button.
 /// </summary>
 public sealed class MainWindow : Window, IDisposable
 {
@@ -30,10 +28,14 @@ public sealed class MainWindow : Window, IDisposable
     private readonly IFramework framework;
     private readonly Configuration config;
 
-    // UI state - all of the inputs live on the window itself so the user can
-    // switch tabs without losing them.
-    private int scope; // 0=bag, 1=item id, 2=filter, 3=armoury
-    private int bagIndex; // 0..3 for Inventory1..4
+    // Container toggles. Default to "every main bag" because that's the
+    // common case (armoury is opt-in since gear in there is more likely
+    // to be valuable).
+    private readonly bool[] bagSelected = { true, true, true, true };
+    private bool armourySelected;
+
+    // Filter parameters. All optional / AND'd together with the bag set.
+    private string nameInput = string.Empty;
     private string itemIdInput = string.Empty;
     private int maxIlvl = 999;
     private int minIlvl;
@@ -53,7 +55,7 @@ public sealed class MainWindow : Window, IDisposable
 
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(520, 360),
+            MinimumSize = new Vector2(560, 420),
             MaximumSize = new Vector2(1200, 900),
         };
     }
@@ -73,36 +75,44 @@ public sealed class MainWindow : Window, IDisposable
         using var tab = ImRaii.TabItem("Targeting");
         if (!tab) return;
 
-        ImGui.TextWrapped("Pick a scope, click Build preview, review the candidate list, then Desynth.");
-        ImGui.Spacing();
+        // --- Bag selection -----------------------------------------------
+        ImGui.TextDisabled("Scan these containers:");
+        ImGui.Checkbox("Bag 1", ref bagSelected[0]); ImGui.SameLine();
+        ImGui.Checkbox("Bag 2", ref bagSelected[1]); ImGui.SameLine();
+        ImGui.Checkbox("Bag 3", ref bagSelected[2]); ImGui.SameLine();
+        ImGui.Checkbox("Bag 4", ref bagSelected[3]); ImGui.SameLine();
+        ImGui.Checkbox("Armoury chest", ref armourySelected);
 
-        ImGui.RadioButton("Entire bag", ref scope, 0); ImGui.SameLine();
-        ImGui.RadioButton("Item ID", ref scope, 1); ImGui.SameLine();
-        ImGui.RadioButton("Filter", ref scope, 2); ImGui.SameLine();
-        ImGui.RadioButton("Armoury", ref scope, 3);
-
         ImGui.Spacing();
+        if (ImGui.SmallButton("All bags"))
+        {
+            for (var i = 0; i < bagSelected.Length; i++) bagSelected[i] = true;
+        }
+        ImGui.SameLine();
+        if (ImGui.SmallButton("No bags"))
+        {
+            for (var i = 0; i < bagSelected.Length; i++) bagSelected[i] = false;
+            armourySelected = false;
+        }
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Bags + armoury"))
+        {
+            for (var i = 0; i < bagSelected.Length; i++) bagSelected[i] = true;
+            armourySelected = true;
+        }
+
         ImGui.Separator();
 
-        switch (scope)
-        {
-            case 0:
-                ImGui.Combo("Bag", ref bagIndex, new[] { "Bag 1", "Bag 2", "Bag 3", "Bag 4" }, 4);
-                break;
-            case 1:
-                ImGui.InputText("Item ID (Lumina row)", ref itemIdInput, 16);
-                ImGui.TextDisabled("Tip: right-click an item in chat -> 'item link' shows its ID in the hover tooltip.");
-                break;
-            case 2:
-                ImGui.SliderInt("Max item level", ref maxIlvl, 1, 999);
-                ImGui.SliderInt("Min item level", ref minIlvl, 0, 999);
-                ImGui.Checkbox("Exclude HQ", ref excludeHq);
-                ImGui.SliderInt("Max spiritbond (0-1000)", ref maxSpiritbond, 0, 1000);
-                break;
-            case 3:
-                ImGui.TextWrapped("Scans every armoury chest slot. Filter further on the Filter tab if you want ilvl caps.");
-                break;
-        }
+        // --- Filters -----------------------------------------------------
+        ImGui.TextDisabled("Filters (all optional - empty fields mean no constraint):");
+
+        ImGui.InputTextWithHint("Item name contains", "e.g. Hempen", ref nameInput, 64);
+        ImGui.InputTextWithHint("Item ID (exact, advanced)", "Lumina row id, optional", ref itemIdInput, 16);
+
+        ImGui.SliderInt("Min item level", ref minIlvl, 0, 999);
+        ImGui.SliderInt("Max item level", ref maxIlvl, 1, 999);
+        ImGui.Checkbox("Exclude HQ", ref excludeHq);
+        ImGui.SliderInt("Max spiritbond (0-1000)", ref maxSpiritbond, 0, 1000);
 
         ImGui.Spacing();
         if (ImGui.Button("Build preview"))
@@ -113,6 +123,8 @@ public sealed class MainWindow : Window, IDisposable
             preview.Clear();
             previewSummary = string.Empty;
         }
+        ImGui.SameLine();
+        ImGui.TextDisabled("(building a preview never modifies anything)");
 
         ImGui.Separator();
         DrawPreview();
@@ -122,7 +134,10 @@ public sealed class MainWindow : Window, IDisposable
     {
         if (preview.Count == 0)
         {
-            ImGui.TextDisabled("No preview built yet.");
+            if (!string.IsNullOrEmpty(previewSummary))
+                ImGui.TextDisabled(previewSummary);
+            else
+                ImGui.TextDisabled("No preview built yet.");
             return;
         }
 
@@ -147,7 +162,7 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-        using var table = ImRaii.Table("bds-preview", 5, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY, new Vector2(0, 240));
+        using var table = ImRaii.Table("bds-preview", 5, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY, new Vector2(0, 260));
         if (!table) return;
 
         ImGui.TableSetupColumn("Container");
@@ -204,10 +219,10 @@ public sealed class MainWindow : Window, IDisposable
             config.InterItemDelayMs = delay;
 
         var timeout = config.AddonWaitTimeoutMs;
-        if (ImGui.SliderInt("Addon wait timeout (ms)", ref timeout, 1000, 10000))
+        if (ImGui.SliderInt("Cast-start timeout (ms)", ref timeout, 1000, 10000))
             config.AddonWaitTimeoutMs = timeout;
 
-        ImGui.TextWrapped("Hover-help: the addon wait timeout is how long to wait for SalvageDialog / SelectYesno / SalvageResult to appear before giving up on an item.");
+        ImGui.TextWrapped("Cast-start timeout: how long to wait for the game's Occupied39 flag to go high after firing a desynth. If the cast never starts within this window the executor logs a warning and moves on.");
     }
 
     private void BuildPreviewOnFramework()
@@ -215,67 +230,61 @@ public sealed class MainWindow : Window, IDisposable
         var filter = BuildFilterFromUi();
         if (filter == null) return;
 
-        // Inventory reads have to happen on the framework thread - schedule
-        // the work and read the result back on the next UI frame.
         framework.RunOnFrameworkThread(() =>
         {
             var built = scanner.BuildPreview(filter);
-            // Apply user-level block/allow list overlays.
+            // Apply user-level block list overlay (allow-list isn't enforced
+            // here - the filter UI already gives full control over what
+            // enters the preview).
             var filtered = built
                 .Where(c => !config.ItemBlockList.Contains(c.ItemId))
                 .ToList();
             preview = filtered;
-            previewSummary = $"{filtered.Count} candidate slot(s) across "
-                + $"{filtered.Select(c => c.Container).Distinct().Count()} container(s).";
+            previewSummary = filtered.Count == 0
+                ? "No matching slots found."
+                : $"{filtered.Count} candidate slot(s) across "
+                  + $"{filtered.Select(c => c.Container).Distinct().Count()} container(s).";
         });
     }
 
     private DesynthFilter? BuildFilterFromUi()
     {
-        switch (scope)
-        {
-            case 0:
-                return new DesynthFilter
-                {
-                    Containers = new List<InventoryType> { ScopeBag(bagIndex) },
-                    ExcludeHq = excludeHq,
-                };
-            case 1:
-                if (!uint.TryParse(itemIdInput, out var id) || id == 0)
-                    return null;
-                return new DesynthFilter
-                {
-                    ItemId = id,
-                    Containers = new List<InventoryType>(DesynthFilter.Presets.MainBags),
-                    ExcludeHq = excludeHq,
-                };
-            case 2:
-                return new DesynthFilter
-                {
-                    MaxItemLevel = (ushort)maxIlvl,
-                    MinItemLevel = (ushort)minIlvl,
-                    ExcludeHq = excludeHq,
-                    MaxSpiritbond = (ushort)maxSpiritbond,
-                };
-            case 3:
-                return new DesynthFilter
-                {
-                    Containers = new List<InventoryType>(DesynthFilter.Presets.ArmouryChest),
-                    ExcludeHq = excludeHq,
-                };
-            default:
-                return null;
-        }
-    }
+        var containers = new List<InventoryType>();
+        if (bagSelected[0]) containers.Add(InventoryType.Inventory1);
+        if (bagSelected[1]) containers.Add(InventoryType.Inventory2);
+        if (bagSelected[2]) containers.Add(InventoryType.Inventory3);
+        if (bagSelected[3]) containers.Add(InventoryType.Inventory4);
+        if (armourySelected) containers.AddRange(DesynthFilter.Presets.ArmouryChest);
 
-    private static InventoryType ScopeBag(int i) => i switch
-    {
-        0 => InventoryType.Inventory1,
-        1 => InventoryType.Inventory2,
-        2 => InventoryType.Inventory3,
-        3 => InventoryType.Inventory4,
-        _ => InventoryType.Inventory1,
-    };
+        if (containers.Count == 0)
+        {
+            previewSummary = "Pick at least one container.";
+            preview.Clear();
+            return null;
+        }
+
+        uint? itemId = null;
+        if (!string.IsNullOrWhiteSpace(itemIdInput)
+            && uint.TryParse(itemIdInput.Trim(), out var parsed) && parsed > 0)
+        {
+            itemId = parsed;
+        }
+
+        // Clamp min <= max so a misaligned slider pair doesn't drop everything.
+        var lo = (ushort)Math.Min(minIlvl, maxIlvl);
+        var hi = (ushort)Math.Max(minIlvl, maxIlvl);
+
+        return new DesynthFilter
+        {
+            Containers = containers,
+            ItemId = itemId,
+            NameContains = string.IsNullOrWhiteSpace(nameInput) ? null : nameInput.Trim(),
+            MinItemLevel = lo,
+            MaxItemLevel = hi,
+            ExcludeHq = excludeHq,
+            MaxSpiritbond = (ushort)maxSpiritbond,
+        };
+    }
 
     public void Dispose() { }
 }

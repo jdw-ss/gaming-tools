@@ -22,6 +22,13 @@ public sealed class DesynthFilter
     /// <summary>If set, only items with this row ID pass.</summary>
     public uint? ItemId { get; init; }
 
+    /// <summary>
+    /// If non-empty, only items whose name contains this substring
+    /// (case-insensitive) pass. Convenient for "desynth every Hempen *"
+    /// without having to look up individual row IDs.
+    /// </summary>
+    public string? NameContains { get; init; }
+
     /// <summary>If set, only items at or below this item level pass.</summary>
     public ushort? MaxItemLevel { get; init; }
 

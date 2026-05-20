@@ -1,18 +1,19 @@
 # Bulk Desynth (Dalamud plugin)
 
 Queue and run **bulk desynthesis** jobs without clicking each item by hand.
-Target by item ID, by bag (1-4), by item-level / equipment-slot filter, or
-across the armoury chest. Every job is **dry-run first**: the plugin builds a
-preview list, you click Confirm, then it walks the list one item at a time on
-the framework tick.
+Tick which bags (and optionally the armoury chest) to scan, optionally
+narrow the result with filters (item name contains, ilvl range, HQ, max
+spiritbond, or an exact Lumina row id), then preview and confirm. Every
+job is **dry-run first**: the plugin builds a preview list, you click the
+red Desynth button, then it walks the list one item at a time on the
+framework tick.
 
 ## Status
 
-`v0.1.0` — implementation complete, **not yet compiled or run against a live
-client**. All ClientStructs / Dalamud API names were verified against the
-local `.refs/` XML docs plus the canonical reference plugins
-(AutoRetainer's `TaskDesynthItems`, SomethingNeedDoing's `InventoryModule`,
-and `ffxiv-bundleoftweaks`).
+`v0.2.0` — tested end-to-end in a live client. Targeting tab now uses
+multi-select bag checkboxes plus inline filter parameters (replacing the
+v0.1.0 scope-radio UX). Name-contains filter added so you don't need to
+know item row IDs.
 
 ## Design at a glance
 
@@ -24,9 +25,11 @@ and `ffxiv-bundleoftweaks`).
    - The player's level in the item's `ClassJobRepair` class is below 30
      (the global desynth unlock threshold), if `RespectSkillCap` is on
    - The unlock quest (id 65688) is not complete
-2. **`MainWindow`** (ImGui) is where the user picks the filter, hits "Build
-   preview", reviews the table, and clicks the red "Desynth N items"
-   button. There is no auto-run path — every job requires explicit click.
+2. **`MainWindow`** (ImGui) - single Targeting tab with bag/armoury
+   checkboxes at the top, filter parameters (name-contains, item id,
+   ilvl range, HQ toggle, spiritbond cap) below them, then **Build
+   preview** -> table -> red **Desynth N items** button. There is no
+   auto-run path - every job requires explicit click.
 3. **`DesynthExecutor`** ticks on `IFramework.Update` and walks the queue:
    ```
    FireNext -> WaitForBusy -> WaitForBusyToClear -> PostCastCooldown -> ...

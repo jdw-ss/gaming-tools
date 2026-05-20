@@ -135,6 +135,13 @@ public sealed class InventoryScanner
                 if (filter.MaxSpiritbond.HasValue && spiritbond > filter.MaxSpiritbond.Value)
                     continue;
 
+                // Resolve the name once so the case-insensitive name filter
+                // and the candidate's display string both reuse it.
+                var name = row.Name.ExtractText();
+                if (!string.IsNullOrEmpty(filter.NameContains)
+                    && name.IndexOf(filter.NameContains, System.StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
                 results.Add(new DesynthCandidate(
                     Container: container,
                     Slot: slot,
@@ -142,7 +149,7 @@ public sealed class InventoryScanner
                     IsHq: isHq,
                     Spiritbond: spiritbond,
                     ItemLevel: itemLevel,
-                    Name: row.Name.ExtractText(),
+                    Name: name,
                     DesynthLevel: desynthLevel));
             }
         }
