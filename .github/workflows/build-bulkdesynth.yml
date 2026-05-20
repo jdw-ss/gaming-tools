@@ -1,0 +1,128 @@
+# Builds the BulkDesynth Dalamud plugin on ubuntu-latest whenever its source
+# changes, and commits the new zip + refreshed pluginmaster.json into
+# `docs/ff14/bulkdesynth/` so GitHub Pages serves it to subscribers.
+#
+# Subscribe URL (paste into Dalamud Settings -> Experimental -> Custom
+# Plugin Repositories):
+#   https://<owner>.github.io/<repo>/ff14/bulkdesynth/pluginmaster.json
+#
+# Where <owner>/<repo> is whatever GitHub repo this monorepo lives in.
+# The URLs baked into pluginmaster.json are constructed from
+# `github.repository` so renaming the repo or transferring ownership Just
+# Works without editing this file.
+
+name: Build BulkDesynth
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "FF14/BulkDesynth/**"
+      - ".github/workflows/build-bulkdesynth.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write # commits the rebuilt artifacts back to main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Read plugin AssemblyVersion
+        id: version
+        run: |
+          MANIFEST_PATH="FF14/BulkDesynth/BulkDesynth.json"
+          VERSION=$(jq -r '.AssemblyVersion' "$MANIFEST_PATH")
+          echo "assembly_version=$VERSION" >> $GITHUB_OUTPUT
+          SEMVER=$(echo "$VERSION" | awk -F. '{ printf "%s.%s.%s", $1, $2, $3 }')
+          echo "semver=$SEMVER" >> $GITHUB_OUTPUT
+          echo "BulkDesynth version: $VERSION (semver: $SEMVER)"
+
+      - name: Download Dalamud reference assemblies
+        run: |
+          mkdir -p FF14/BulkDesynth/.refs
+          # goatcorp/dalamud-distrib ships the same reference DLLs that
+          # XIVLauncher installs locally. `latest.zip` tracks Dalamud's
+          # release branch (matching DalamudApiLevel 15 currently).
+          curl -L -o /tmp/dalamud.zip https://goatcorp.github.io/dalamud-distrib/latest.zip
+          unzip -q /tmp/dalamud.zip -d FF14/BulkDesynth/.refs
+          # Sanity-check the critical DLLs landed.
+          test -f FF14/BulkDesynth/.refs/Dalamud.dll
+          test -f FF14/BulkDesynth/.refs/FFXIVClientStructs.dll
+          test -f FF14/BulkDesynth/.refs/Lumina.Excel.dll
+          test -f FF14/BulkDesynth/.refs/Dalamud.Bindings.ImGui.dll
+          echo "Dalamud refs extracted OK ($(ls FF14/BulkDesynth/.refs | wc -l) files)."
+
+      - name: Build (Release)
+        run: |
+          dotnet restore FF14/BulkDesynth/BulkDesynth.csproj
+          dotnet build FF14/BulkDesynth/BulkDesynth.csproj \
+            --configuration Release \
+            --no-restore
+
+      - name: Package zip
+        run: |
+          OUT_DIR="docs/ff14/bulkdesynth"
+          mkdir -p "$OUT_DIR"
+          cd FF14/BulkDesynth/bin/Release/net10.0-windows
+          rm -f "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip"
+          # Match the layout the tracker plugin uses: 4-file zip.
+          # .deps.json + .pdb are optional but cheap and help debugging.
+          zip -q "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip" \
+            BulkDesynth.dll \
+            BulkDesynth.json \
+            BulkDesynth.deps.json \
+            BulkDesynth.pdb
+          echo "Built zip contents:"
+          unzip -l "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip"
+
+      - name: Refresh pluginmaster.json
+        env:
+          ASSEMBLY_VERSION: ${{ steps.version.outputs.assembly_version }}
+          OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          MANIFEST=$(cat FF14/BulkDesynth/BulkDesynth.json)
+          NOW=$(date +%s)
+          # GitHub Pages project-page URL: https://<owner>.github.io/<repo>/
+          # We append the plugin's path (ff14/bulkdesynth/) so multiple
+          # plugins can share the same Pages site without clashing.
+          BASE_URL="https://${OWNER}.github.io/${REPO_NAME}/ff14/bulkdesynth"
+          DOWNLOAD_URL="${BASE_URL}/latest.zip"
+          jq -n --argjson m "$MANIFEST" --arg url "$DOWNLOAD_URL" --argjson now "$NOW" '[
+            ($m + {
+              Punchline: ($m.Punchline // "Bulk-desynth items in FFXIV."),
+              DownloadLinkInstall: $url,
+              DownloadLinkUpdate: $url,
+              DownloadLinkTesting: $url,
+              DownloadCount: 0,
+              LastUpdate: $now,
+              IsHide: false,
+              IsTestingExclusive: false
+            })
+          ]' > docs/ff14/bulkdesynth/pluginmaster.json
+          echo "Refreshed pluginmaster.json:"
+          cat docs/ff14/bulkdesynth/pluginmaster.json
+
+      - name: Commit + push (if changed)
+        run: |
+          if git diff --quiet docs/ff14/bulkdesynth/; then
+            echo "docs/ff14/bulkdesynth/ unchanged - skipping commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ff14/bulkdesynth/latest.zip docs/ff14/bulkdesynth/pluginmaster.json
+          git commit -m "ci: rebuild BulkDesynth v${{ steps.version.outputs.semver }}" \
+            -m "Auto-built on ubuntu-latest by .github/workflows/build-bulkdesynth.yml. GitHub Pages will pick up the new zip on its next deploy cycle (usually under a minute)."
+          git push
