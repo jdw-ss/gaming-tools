@@ -10,6 +10,17 @@ framework tick.
 
 ## Status
 
+`v0.4.0` — Location column now shows what the **player** sees, not the
+raw internal storage:
+- Preview table's "Container" + "Slot" columns are replaced by a single
+  "Location" column rendered as `Bag {N} ({row},{col})` (5 cols x 7 rows
+  per page).
+- The internal-to-visual map comes from `ItemOrderModule.InventorySorter`,
+  so the labels respect any drag-rearrangement done in-game.
+- Armoury items keep the `Container slot N` fallback since the armoury
+  isn't in the InventorySorter.
+- Run status's "Current: ..." line uses the same format.
+
 `v0.3.0` — UI polish pass on top of the v0.2.0 baseline.
 - Filters compressed into three horizontal rows (name+id, min+max ilvl
   as typed numbers, spiritbond+HQ).

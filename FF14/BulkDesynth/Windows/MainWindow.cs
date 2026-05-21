@@ -191,7 +191,7 @@ public sealed class MainWindow : Window, IDisposable
             if (ImGui.Button("Stop run"))
                 executor.Stop("user requested stop");
             if (executor.CurrentItem is { } cur)
-                ImGui.TextDisabled($"Current: {cur.Name} (slot {cur.Slot} of {cur.Container})");
+                ImGui.TextDisabled($"Current: {cur.Name} ({FormatLocation(cur)})");
             else
                 ImGui.TextDisabled("Current: (waiting for next item)");
         }
@@ -218,11 +218,10 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-        using var table = ImRaii.Table("bds-preview", 5, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY, new Vector2(0, 260));
+        using var table = ImRaii.Table("bds-preview", 4, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY, new Vector2(0, 260));
         if (!table) return;
 
-        ImGui.TableSetupColumn("Container");
-        ImGui.TableSetupColumn("Slot");
+        ImGui.TableSetupColumn("Location");
         ImGui.TableSetupColumn("Item");
         ImGui.TableSetupColumn("iLvl");
         ImGui.TableSetupColumn("Flags");
@@ -231,12 +230,27 @@ public sealed class MainWindow : Window, IDisposable
         foreach (var c in rows)
         {
             ImGui.TableNextRow();
-            ImGui.TableNextColumn(); ImGui.Text(c.Container.ToString());
-            ImGui.TableNextColumn(); ImGui.Text(c.Slot.ToString());
+            ImGui.TableNextColumn(); ImGui.Text(FormatLocation(c));
             ImGui.TableNextColumn(); ImGui.Text(c.Name);
             ImGui.TableNextColumn(); ImGui.Text(c.ItemLevel.ToString());
             ImGui.TableNextColumn(); ImGui.Text((c.IsHq ? "HQ " : "") + $"SB:{c.Spiritbond}");
         }
+    }
+
+    /// <summary>
+    /// Render-time formatting of an inventory slot in player-visible terms.
+    /// For main bags this is "Bag {N} ({row},{col})" matching what the player
+    /// sees on screen (5 cols x 7 rows per page). For armoury and any other
+    /// container where the visual lookup failed, falls back to the internal
+    /// container name + slot index.
+    /// </summary>
+    private static string FormatLocation(DesynthCandidate c)
+    {
+        if (c.VisualBag == 0)
+            return $"{c.Container} slot {c.Slot}";
+        var row = c.VisualSlot / 5 + 1;
+        var col = c.VisualSlot % 5 + 1;
+        return $"Bag {c.VisualBag} ({row},{col})";
     }
 
     private void DrawSettingsTab()

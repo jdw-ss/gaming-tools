@@ -27,7 +27,7 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <AssemblyName>BulkDesynth</AssemblyName>
     <RootNamespace>BulkDesynth</RootNamespace>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <!-- Required to dereference InventoryManager / AgentSalvage pointers from
          FFXIVClientStructs. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

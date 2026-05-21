@@ -3,6 +3,7 @@ using BulkDesynth.Models;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using LuminaItem = Lumina.Excel.Sheets.Item;
 
 namespace BulkDesynth.Services;
@@ -75,6 +76,12 @@ public sealed class InventoryScanner
 
         var itemSheet = dataManager.GetExcelSheet<LuminaItem>();
 
+        // Build the internal -> visual bag/slot map once for the whole scan.
+        // The lookup respects whatever drag-rearrangement the player has done
+        // in their inventory window (SortaKinda etc.). Falls back to (0, 0)
+        // sentinel for slots we can't resolve.
+        var visualMap = BuildInternalToVisualMap();
+
         foreach (var container in filter.Containers)
         {
             var inv = manager->GetInventoryContainer(container);
@@ -142,6 +149,17 @@ public sealed class InventoryScanner
                     && name.IndexOf(filter.NameContains, System.StringComparison.OrdinalIgnoreCase) < 0)
                     continue;
 
+                // Look up the visual position. Only meaningful for main bags
+                // (Inventory1..4) - armoury slots aren't in the InventorySorter
+                // and stay at (0, 0).
+                byte visualBag = 0;
+                byte visualSlot = 0;
+                if (visualMap.TryGetValue((container, slot), out var v))
+                {
+                    visualBag = v.bag;
+                    visualSlot = v.slot;
+                }
+
                 results.Add(new DesynthCandidate(
                     Container: container,
                     Slot: slot,
@@ -150,10 +168,55 @@ public sealed class InventoryScanner
                     Spiritbond: spiritbond,
                     ItemLevel: itemLevel,
                     Name: name,
-                    DesynthLevel: desynthLevel));
+                    DesynthLevel: desynthLevel,
+                    VisualBag: visualBag,
+                    VisualSlot: visualSlot));
             }
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Walk <c>ItemOrderModule.InventorySorter->Items</c> once and return a
+    /// map from internal (<see cref="InventoryType"/>, slot) to the visual
+    /// (bag 1-4, slot 0-34) position the player sees in their customized
+    /// inventory window.
+    ///
+    /// Cross-referenced from SimpleTweaksPlugin/Tweaks/EquipFromHotbar.cs:
+    /// <c>sorter->Items[i]</c> is indexed by VISUAL position; each entry's
+    /// <c>Page</c> and <c>Slot</c> point at where the item actually lives
+    /// internally. So we invert the relationship by iterating.
+    /// </summary>
+    private static unsafe Dictionary<(InventoryType, short), (byte bag, byte slot)> BuildInternalToVisualMap()
+    {
+        var map = new Dictionary<(InventoryType, short), (byte, byte)>(capacity: 140);
+
+        var module = ItemOrderModule.Instance();
+        if (module == null) return map;
+        var sorter = module->InventorySorter;
+        if (sorter == null) return map;
+        var itemsPerPage = sorter->ItemsPerPage;
+        if (itemsPerPage <= 0) return map;
+
+        var total = sorter->Items.LongCount;
+        for (var i = 0L; i < total; i++)
+        {
+            var entry = sorter->Items[(ulong)i].Value;
+            if (entry == null) continue;
+
+            // entry->Page is an offset 0..3 from InventoryType.Inventory1.
+            var internalContainer = InventoryType.Inventory1 + entry->Page;
+            var internalSlot = (short)entry->Slot;
+
+            // Visual position is the linear index into Items, broken into
+            // (bag, slotInBag). Bag is 1-indexed for the display layer.
+            var visualBag = (byte)(i / itemsPerPage + 1);
+            var visualSlot = (byte)(i % itemsPerPage);
+
+            map[(internalContainer, internalSlot)] = (visualBag, visualSlot);
+        }
+
+        return map;
     }
 }
