@@ -211,7 +211,17 @@ public sealed class MainWindow : Window, IDisposable
             using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.70f, 0.20f, 0.20f, 1f)))
             {
                 if (ImGui.Button(label))
+                {
                     executor.Start(preview);
+                    // Drop our copy now that the executor has its own. The
+                    // table renders executor.RemainingItems while running, so
+                    // we don't need this list anymore; clearing it means the
+                    // preview goes blank after the run ends (instead of
+                    // re-displaying the pre-run snapshot, which would look
+                    // like nothing got desynth'd).
+                    preview = new List<DesynthCandidate>();
+                    previewSummary = string.Empty;
+                }
             }
             ImGui.SameLine();
             ImGui.TextDisabled("(cannot be undone)");
