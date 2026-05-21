@@ -202,7 +202,7 @@ public sealed class InventoryScanner
         var total = sorter->Items.LongCount;
         for (var i = 0L; i < total; i++)
         {
-            var entry = sorter->Items[(ulong)i].Value;
+            var entry = sorter->Items[i].Value;
             if (entry == null) continue;
 
             // entry->Page is an offset 0..3 from InventoryType.Inventory1.
