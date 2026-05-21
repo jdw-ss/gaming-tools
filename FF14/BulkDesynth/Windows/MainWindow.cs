@@ -43,11 +43,22 @@ public sealed class MainWindow : Window, IDisposable
     private bool excludeHq = true;
     private int maxSpiritbond = 100;
 
-    // Static preview built by "Build preview". While a run is in progress
-    // the table actually renders executor.RemainingItems instead, so the
-    // user sees rows disappear as each item is processed.
+    // Static preview built by "Desynth Preview". While a Bulk Desynth is in
+    // progress the table actually renders executor.RemainingItems instead, so
+    // the user sees rows disappear as each item is processed.
     private List<DesynthCandidate> preview = new();
     private string previewSummary = string.Empty;
+
+    // Set when a Bulk Desynth completes so the user has something to read in
+    // the moment between "the last row vanished from the table" and "I build
+    // a new preview". Cleared when a new preview is built or a new Bulk
+    // Desynth starts.
+    private string lastRunSummary = string.Empty;
+
+    // Edge-detection for run completion: if last frame was running and this
+    // frame isn't, we just finished. Used to populate lastRunSummary exactly
+    // once per run.
+    private bool wasRunning;
 
     public MainWindow(InventoryScanner scanner, DesynthExecutor executor, IFramework framework, Configuration config)
         : base("Bulk Desynth##bds-main", ImGuiWindowFlags.None)
@@ -84,20 +95,20 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Checkbox("Bag 2", ref bagSelected[1]); ImGui.SameLine();
         ImGui.Checkbox("Bag 3", ref bagSelected[2]); ImGui.SameLine();
         ImGui.Checkbox("Bag 4", ref bagSelected[3]); ImGui.SameLine();
-        ImGui.Checkbox("Armoury chest", ref armourySelected);
+        ImGui.Checkbox("Armoury Chest", ref armourySelected);
 
-        if (ImGui.SmallButton("All bags"))
+        if (ImGui.SmallButton("All Bags"))
         {
             for (var i = 0; i < bagSelected.Length; i++) bagSelected[i] = true;
         }
         ImGui.SameLine();
-        if (ImGui.SmallButton("No bags"))
+        if (ImGui.SmallButton("No Bags"))
         {
             for (var i = 0; i < bagSelected.Length; i++) bagSelected[i] = false;
             armourySelected = false;
         }
         ImGui.SameLine();
-        if (ImGui.SmallButton("Bags + armoury"))
+        if (ImGui.SmallButton("Bags + Armoury"))
         {
             for (var i = 0; i < bagSelected.Length; i++) bagSelected[i] = true;
             armourySelected = true;
@@ -140,7 +151,7 @@ public sealed class MainWindow : Window, IDisposable
 
         // Row 3: spiritbond cap + HQ checkbox
         ImGui.AlignTextToFramePadding();
-        ImGui.Text("Max spiritbond %");
+        ImGui.Text("Max Spiritbond %");
         ImGui.SameLine();
         ImGui.PushItemWidth(80);
         ImGui.InputInt("##bds-sb", ref maxSpiritbond, 0, 0);
@@ -158,16 +169,17 @@ public sealed class MainWindow : Window, IDisposable
         if (maxSpiritbond > 100) maxSpiritbond = 100;
 
         ImGui.Spacing();
-        if (ImGui.Button("Build preview"))
+        if (ImGui.Button("Desynth Preview"))
             BuildPreviewOnFramework();
         ImGui.SameLine();
-        if (ImGui.Button("Clear preview"))
+        if (ImGui.Button("Clear Preview"))
         {
             preview.Clear();
             previewSummary = string.Empty;
+            lastRunSummary = string.Empty;
         }
         ImGui.SameLine();
-        ImGui.TextDisabled("(building a preview never modifies anything)");
+        ImGui.TextDisabled("A preview shows you desynthable items");
 
         ImGui.Separator();
         DrawPreviewAndRun();
@@ -175,11 +187,20 @@ public sealed class MainWindow : Window, IDisposable
 
     private void DrawPreviewAndRun()
     {
-        // While a run is in progress the table reflects executor state -
-        // each successful desynth removes a row. When idle, show the
-        // user's last-built preview.
+        // While a Bulk Desynth is in progress the table reflects executor
+        // state - each successful desynth removes a row. When idle, show
+        // the user's last-built preview.
         var running = executor.IsRunning;
         IReadOnlyList<DesynthCandidate> rows = running ? executor.RemainingItems : preview;
+
+        // Edge-detect run completion (was running last frame, isn't now)
+        // and post a summary so the empty table doesn't feel like nothing
+        // happened. Capture before any branches return.
+        if (wasRunning && !running)
+        {
+            lastRunSummary = $"Last Bulk Desynth: {executor.Processed} item(s) processed.";
+        }
+        wasRunning = running;
 
         // --- Top strip: status / actions ---------------------------------
         if (running)
@@ -188,7 +209,7 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.SameLine();
             ImGui.Text($"Remaining: {executor.Remaining}");
             ImGui.SameLine();
-            if (ImGui.Button("Stop run"))
+            if (ImGui.Button("Stop Bulk Desynth"))
                 executor.Stop("user requested stop");
             if (executor.CurrentItem is { } cur)
                 ImGui.TextDisabled($"Current: {cur.Name} ({FormatLocation(cur)})");
@@ -197,7 +218,9 @@ public sealed class MainWindow : Window, IDisposable
         }
         else if (rows.Count == 0)
         {
-            if (!string.IsNullOrEmpty(previewSummary))
+            if (!string.IsNullOrEmpty(lastRunSummary))
+                ImGui.TextDisabled(lastRunSummary);
+            else if (!string.IsNullOrEmpty(previewSummary))
                 ImGui.TextDisabled(previewSummary);
             else
                 ImGui.TextDisabled("No preview built yet.");
@@ -216,11 +239,16 @@ public sealed class MainWindow : Window, IDisposable
                     // Drop our copy now that the executor has its own. The
                     // table renders executor.RemainingItems while running, so
                     // we don't need this list anymore; clearing it means the
-                    // preview goes blank after the run ends (instead of
-                    // re-displaying the pre-run snapshot, which would look
+                    // preview goes blank after the Bulk Desynth ends (instead
+                    // of re-displaying the pre-run snapshot, which would look
                     // like nothing got desynth'd).
                     preview = new List<DesynthCandidate>();
                     previewSummary = string.Empty;
+                    // The new run's completion summary will overwrite this
+                    // when it finishes; clearing now avoids the stale
+                    // "Last Bulk Desynth: 0 item(s) processed" flash on the
+                    // first frame after Start.
+                    lastRunSummary = string.Empty;
                 }
             }
             ImGui.SameLine();
@@ -269,18 +297,18 @@ public sealed class MainWindow : Window, IDisposable
         if (!tab) return;
 
         var cap = config.PerRunHardCap;
-        if (ImGui.SliderInt("Per-run hard cap", ref cap, 1, 200))
+        if (ImGui.SliderInt("Per-Bulk-Desynth Hard Cap", ref cap, 1, 200))
             config.PerRunHardCap = cap;
 
         var delay = config.InterItemDelayMs;
-        if (ImGui.SliderInt("Delay between items (ms)", ref delay, 500, 5000))
+        if (ImGui.SliderInt("Delay Between Items (ms)", ref delay, 500, 5000))
             config.InterItemDelayMs = delay;
 
         var timeout = config.AddonWaitTimeoutMs;
-        if (ImGui.SliderInt("Cast-start timeout (ms)", ref timeout, 1000, 10000))
+        if (ImGui.SliderInt("Cast-Start Timeout (ms)", ref timeout, 1000, 10000))
             config.AddonWaitTimeoutMs = timeout;
 
-        ImGui.TextWrapped("Cast-start timeout: how long to wait for the game's Occupied39 flag to go high after firing a desynth. If the cast never starts within this window the executor logs a warning and moves on. Bump this if you ever see items get skipped under network lag.");
+        ImGui.TextWrapped("Cast-Start Timeout: how long to wait for the game's Occupied39 flag to go high after firing a desynth. If the cast never starts within this window the Bulk Desynth aborts that item and continues with the next. Bump this if you ever see items get skipped under network lag.");
     }
 
     private void BuildPreviewOnFramework()
@@ -299,6 +327,8 @@ public sealed class MainWindow : Window, IDisposable
                 ? "No matching slots found."
                 : $"{filtered.Count} candidate slot(s) across "
                   + $"{filtered.Select(c => c.Container).Distinct().Count()} container(s).";
+            // The new preview supersedes any leftover completion message.
+            lastRunSummary = string.Empty;
         });
     }
 
