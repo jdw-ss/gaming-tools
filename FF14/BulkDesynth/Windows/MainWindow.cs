@@ -12,11 +12,12 @@ using Dalamud.Bindings.ImGui;
 namespace BulkDesynth.Windows;
 
 /// <summary>
-/// Single window with three tabs:
-///   - "Targeting" - tick which containers to scan, optionally narrow with
-///     filter parameters, hit Build preview, then Desynth.
-///   - "Run" - shows progress of the in-flight queue.
-///   - "Settings" - runtime pacing knobs.
+/// Single Targeting tab (plus a Settings tab) covering everything:
+///   - container toggles + quick-select buttons
+///   - inline horizontal filter rows (name+id, ilvl min/max, spiritbond+HQ)
+///   - preview table that shrinks live as items are processed during a run
+///   - run status (processed / remaining / current / stop) folded in below
+///     the preview so there's no need to tab-switch mid-run
 ///
 /// We never invoke the executor automatically. The preview must be explicitly
 /// confirmed via the red "Desynth N items" button.
@@ -29,19 +30,22 @@ public sealed class MainWindow : Window, IDisposable
     private readonly Configuration config;
 
     // Container toggles. Default to "every main bag" because that's the
-    // common case (armoury is opt-in since gear in there is more likely
-    // to be valuable).
+    // common case (armoury is opt-in since gear there is more likely to
+    // be valuable).
     private readonly bool[] bagSelected = { true, true, true, true };
     private bool armourySelected;
 
     // Filter parameters. All optional / AND'd together with the bag set.
     private string nameInput = string.Empty;
     private string itemIdInput = string.Empty;
-    private int maxIlvl = 999;
     private int minIlvl;
+    private int maxIlvl = 999;
     private bool excludeHq = true;
-    private int maxSpiritbond = 1000;
+    private int maxSpiritbond = 100;
 
+    // Static preview built by "Build preview". While a run is in progress
+    // the table actually renders executor.RemainingItems instead, so the
+    // user sees rows disappear as each item is processed.
     private List<DesynthCandidate> preview = new();
     private string previewSummary = string.Empty;
 
@@ -55,7 +59,7 @@ public sealed class MainWindow : Window, IDisposable
 
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(560, 420),
+            MinimumSize = new Vector2(540, 460),
             MaximumSize = new Vector2(1200, 900),
         };
     }
@@ -66,7 +70,6 @@ public sealed class MainWindow : Window, IDisposable
         if (!tabs) return;
 
         DrawTargetingTab();
-        DrawRunTab();
         DrawSettingsTab();
     }
 
@@ -75,7 +78,7 @@ public sealed class MainWindow : Window, IDisposable
         using var tab = ImRaii.TabItem("Targeting");
         if (!tab) return;
 
-        // --- Bag selection -----------------------------------------------
+        // --- Container toggles -------------------------------------------
         ImGui.TextDisabled("Scan these containers:");
         ImGui.Checkbox("Bag 1", ref bagSelected[0]); ImGui.SameLine();
         ImGui.Checkbox("Bag 2", ref bagSelected[1]); ImGui.SameLine();
@@ -83,7 +86,6 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.Checkbox("Bag 4", ref bagSelected[3]); ImGui.SameLine();
         ImGui.Checkbox("Armoury chest", ref armourySelected);
 
-        ImGui.Spacing();
         if (ImGui.SmallButton("All bags"))
         {
             for (var i = 0; i < bagSelected.Length; i++) bagSelected[i] = true;
@@ -103,16 +105,57 @@ public sealed class MainWindow : Window, IDisposable
 
         ImGui.Separator();
 
-        // --- Filters -----------------------------------------------------
+        // --- Filters (3 rows of horizontal pairs) ------------------------
         ImGui.TextDisabled("Filters (all optional - empty fields mean no constraint):");
 
-        ImGui.InputTextWithHint("Item name contains", "e.g. Hempen", ref nameInput, 64);
-        ImGui.InputTextWithHint("Item ID (exact, advanced)", "Lumina row id, optional", ref itemIdInput, 16);
+        // Row 1: name (left, wider) + item id (right, narrow)
+        ImGui.AlignTextToFramePadding();
+        ImGui.Text("Name");
+        ImGui.SameLine();
+        ImGui.PushItemWidth(200);
+        ImGui.InputTextWithHint("##bds-name", "e.g. Hempen", ref nameInput, 64);
+        ImGui.PopItemWidth();
+        ImGui.SameLine();
+        ImGui.AlignTextToFramePadding();
+        ImGui.Text("Item ID");
+        ImGui.SameLine();
+        ImGui.PushItemWidth(100);
+        ImGui.InputTextWithHint("##bds-id", "optional", ref itemIdInput, 16);
+        ImGui.PopItemWidth();
 
-        ImGui.SliderInt("Min item level", ref minIlvl, 0, 999);
-        ImGui.SliderInt("Max item level", ref maxIlvl, 1, 999);
+        // Row 2: min ilvl + max ilvl (typed numbers, not sliders)
+        ImGui.AlignTextToFramePadding();
+        ImGui.Text("Min ilvl");
+        ImGui.SameLine();
+        ImGui.PushItemWidth(80);
+        ImGui.InputInt("##bds-minilvl", ref minIlvl, 0, 0);
+        ImGui.PopItemWidth();
+        ImGui.SameLine();
+        ImGui.AlignTextToFramePadding();
+        ImGui.Text("Max ilvl");
+        ImGui.SameLine();
+        ImGui.PushItemWidth(80);
+        ImGui.InputInt("##bds-maxilvl", ref maxIlvl, 0, 0);
+        ImGui.PopItemWidth();
+
+        // Row 3: spiritbond cap + HQ checkbox
+        ImGui.AlignTextToFramePadding();
+        ImGui.Text("Max spiritbond %");
+        ImGui.SameLine();
+        ImGui.PushItemWidth(80);
+        ImGui.InputInt("##bds-sb", ref maxSpiritbond, 0, 0);
+        ImGui.PopItemWidth();
+        ImGui.SameLine();
         ImGui.Checkbox("Exclude HQ", ref excludeHq);
-        ImGui.SliderInt("Max spiritbond (0-1000)", ref maxSpiritbond, 0, 1000);
+
+        // Clamp inputs to sane ranges on every frame (cheap; happens after
+        // typing whether or not Enter was pressed).
+        if (minIlvl < 0) minIlvl = 0;
+        if (maxIlvl < 1) maxIlvl = 1;
+        if (minIlvl > 999) minIlvl = 999;
+        if (maxIlvl > 999) maxIlvl = 999;
+        if (maxSpiritbond < 0) maxSpiritbond = 0;
+        if (maxSpiritbond > 100) maxSpiritbond = 100;
 
         ImGui.Spacing();
         if (ImGui.Button("Build preview"))
@@ -127,12 +170,32 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.TextDisabled("(building a preview never modifies anything)");
 
         ImGui.Separator();
-        DrawPreview();
+        DrawPreviewAndRun();
     }
 
-    private void DrawPreview()
+    private void DrawPreviewAndRun()
     {
-        if (preview.Count == 0)
+        // While a run is in progress the table reflects executor state -
+        // each successful desynth removes a row. When idle, show the
+        // user's last-built preview.
+        var running = executor.IsRunning;
+        IReadOnlyList<DesynthCandidate> rows = running ? executor.RemainingItems : preview;
+
+        // --- Top strip: status / actions ---------------------------------
+        if (running)
+        {
+            ImGui.Text($"Processed: {executor.Processed}");
+            ImGui.SameLine();
+            ImGui.Text($"Remaining: {executor.Remaining}");
+            ImGui.SameLine();
+            if (ImGui.Button("Stop run"))
+                executor.Stop("user requested stop");
+            if (executor.CurrentItem is { } cur)
+                ImGui.TextDisabled($"Current: {cur.Name} (slot {cur.Slot} of {cur.Container})");
+            else
+                ImGui.TextDisabled("Current: (waiting for next item)");
+        }
+        else if (rows.Count == 0)
         {
             if (!string.IsNullOrEmpty(previewSummary))
                 ImGui.TextDisabled(previewSummary);
@@ -140,17 +203,10 @@ public sealed class MainWindow : Window, IDisposable
                 ImGui.TextDisabled("No preview built yet.");
             return;
         }
-
-        ImGui.Text(previewSummary);
-        ImGui.Spacing();
-
-        if (executor.IsRunning)
-        {
-            ImGui.TextDisabled("A run is already in progress - check the Run tab.");
-        }
         else
         {
-            var label = $"Desynth {preview.Count} item(s)";
+            ImGui.Text(previewSummary);
+            var label = $"Desynth {rows.Count} item(s)";
             using (ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.55f, 0.15f, 0.15f, 1f)))
             using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.70f, 0.20f, 0.20f, 1f)))
             {
@@ -172,7 +228,7 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.TableSetupColumn("Flags");
         ImGui.TableHeadersRow();
 
-        foreach (var c in preview)
+        foreach (var c in rows)
         {
             ImGui.TableNextRow();
             ImGui.TableNextColumn(); ImGui.Text(c.Container.ToString());
@@ -181,28 +237,6 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.TableNextColumn(); ImGui.Text(c.ItemLevel.ToString());
             ImGui.TableNextColumn(); ImGui.Text((c.IsHq ? "HQ " : "") + $"SB:{c.Spiritbond}");
         }
-    }
-
-    private void DrawRunTab()
-    {
-        using var tab = ImRaii.TabItem("Run");
-        if (!tab) return;
-
-        if (!executor.IsRunning)
-        {
-            ImGui.TextWrapped("Nothing running. Build a preview on the Targeting tab and click 'Desynth' to start.");
-            ImGui.TextDisabled($"Last run processed {executor.Processed} item(s).");
-            return;
-        }
-
-        ImGui.Text($"Processed: {executor.Processed}");
-        ImGui.Text($"Remaining: {executor.Remaining}");
-        if (executor.CurrentItem is { } cur)
-            ImGui.Text($"Current: {cur.Name} (slot {cur.Slot} of {cur.Container})");
-
-        ImGui.Spacing();
-        if (ImGui.Button("Stop run"))
-            executor.Stop("user requested stop");
     }
 
     private void DrawSettingsTab()
@@ -222,7 +256,7 @@ public sealed class MainWindow : Window, IDisposable
         if (ImGui.SliderInt("Cast-start timeout (ms)", ref timeout, 1000, 10000))
             config.AddonWaitTimeoutMs = timeout;
 
-        ImGui.TextWrapped("Cast-start timeout: how long to wait for the game's Occupied39 flag to go high after firing a desynth. If the cast never starts within this window the executor logs a warning and moves on.");
+        ImGui.TextWrapped("Cast-start timeout: how long to wait for the game's Occupied39 flag to go high after firing a desynth. If the cast never starts within this window the executor logs a warning and moves on. Bump this if you ever see items get skipped under network lag.");
     }
 
     private void BuildPreviewOnFramework()
@@ -233,9 +267,6 @@ public sealed class MainWindow : Window, IDisposable
         framework.RunOnFrameworkThread(() =>
         {
             var built = scanner.BuildPreview(filter);
-            // Apply user-level block list overlay (allow-list isn't enforced
-            // here - the filter UI already gives full control over what
-            // enters the preview).
             var filtered = built
                 .Where(c => !config.ItemBlockList.Contains(c.ItemId))
                 .ToList();
@@ -270,7 +301,7 @@ public sealed class MainWindow : Window, IDisposable
             itemId = parsed;
         }
 
-        // Clamp min <= max so a misaligned slider pair doesn't drop everything.
+        // Clamp min <= max so a swapped pair doesn't drop everything.
         var lo = (ushort)Math.Min(minIlvl, maxIlvl);
         var hi = (ushort)Math.Max(minIlvl, maxIlvl);
 

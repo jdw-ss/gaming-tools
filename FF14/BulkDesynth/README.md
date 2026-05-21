@@ -10,10 +10,17 @@ framework tick.
 
 ## Status
 
-`v0.2.0` — tested end-to-end in a live client. Targeting tab now uses
-multi-select bag checkboxes plus inline filter parameters (replacing the
-v0.1.0 scope-radio UX). Name-contains filter added so you don't need to
-know item row IDs.
+`v0.3.0` — UI polish pass on top of the v0.2.0 baseline.
+- Filters compressed into three horizontal rows (name+id, min+max ilvl
+  as typed numbers, spiritbond+HQ).
+- Spiritbond cap corrected to 0-100 (matches the in-game percentage; the
+  v0.2.0 0-1000 slider was based on a stale assumption).
+- Run-status panel folded into the Targeting tab so no tab-switching
+  mid-run. Run tab removed.
+- Preview table shrinks live as each item is desynth'd - the executor's
+  `RemainingItems` list is the source of truth during a run.
+
+Armoury + main-bag paths both verified end-to-end on live client.
 
 ## Design at a glance
 
@@ -26,10 +33,11 @@ know item row IDs.
      (the global desynth unlock threshold), if `RespectSkillCap` is on
    - The unlock quest (id 65688) is not complete
 2. **`MainWindow`** (ImGui) - single Targeting tab with bag/armoury
-   checkboxes at the top, filter parameters (name-contains, item id,
-   ilvl range, HQ toggle, spiritbond cap) below them, then **Build
-   preview** -> table -> red **Desynth N items** button. There is no
-   auto-run path - every job requires explicit click.
+   checkboxes at the top, three horizontal filter rows below them, then
+   **Build preview** -> table -> red **Desynth N items** button. During
+   a run, the same area swaps to a `Processed | Remaining | [Stop]` strip
+   above the (live-shrinking) table. There is no auto-run path - every
+   job requires explicit click.
 3. **`DesynthExecutor`** ticks on `IFramework.Update` and walks the queue:
    ```
    FireNext -> WaitForBusy -> WaitForBusyToClear -> PostCastCooldown -> ...

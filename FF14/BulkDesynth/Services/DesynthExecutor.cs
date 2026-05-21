@@ -19,7 +19,7 @@ namespace BulkDesynth.Services;
 ///
 ///   AgentSalvage.Instance()->SalvageItem(item);
 ///   AgentSalvage.Instance()->AgentInterface.ReceiveEvent(
-///       &retval,
+///       &amp;retval,
 ///       params,            // [ Int=0, Bool=1 ]
 ///       2,                 // event kind = Begin
 ///       1);                // listener id
@@ -32,6 +32,10 @@ namespace BulkDesynth.Services;
 /// Pacing is gated by <see cref="ConditionFlag.Occupied39"/> (the game's
 /// own busy flag while the desynth cast + animation runs) plus a configurable
 /// post-cast cooldown. No addon-callback timing required.
+///
+/// Live preview pruning: <see cref="RemainingItems"/> exposes the still-to-do
+/// candidate list. The UI binds its table to this collection while a run is
+/// in progress so each successful desynth visibly removes a row.
 /// </summary>
 public sealed class DesynthExecutor : IDisposable
 {
@@ -50,13 +54,26 @@ public sealed class DesynthExecutor : IDisposable
     private readonly IPluginLog log;
     private readonly Configuration config;
 
-    private readonly Queue<DesynthCandidate> queue = new();
+    // Single source of truth for "what's still pending in this run". The UI
+    // reads this via RemainingItems each frame; we mutate it on the framework
+    // thread (the only thread that drives Tick), and the UI Draw also runs
+    // on the framework thread, so no locking is required.
+    private readonly List<DesynthCandidate> remaining = new();
     private DesynthCandidate? current;
     private Phase phase = Phase.Idle;
     private DateTime deadline = DateTime.MinValue;
 
     public int Processed { get; private set; }
-    public int Remaining => queue.Count;
+
+    /// <summary>Count of candidates still queued (excludes the in-flight one).</summary>
+    public int Remaining => remaining.Count;
+
+    /// <summary>
+    /// Live view of pending candidates. The UI may iterate this while drawing
+    /// to render the shrinking preview during a run.
+    /// </summary>
+    public IReadOnlyList<DesynthCandidate> RemainingItems => remaining;
+
     public bool IsRunning => phase != Phase.Idle;
     public DesynthCandidate? CurrentItem => current;
 
@@ -78,22 +95,22 @@ public sealed class DesynthExecutor : IDisposable
         }
 
         var cap = Math.Min(items.Count, Math.Max(1, config.PerRunHardCap));
-        queue.Clear();
+        remaining.Clear();
         for (var i = 0; i < cap; i++)
-            queue.Enqueue(items[i]);
+            remaining.Add(items[i]);
 
         Processed = 0;
         current = null;
         phase = Phase.FireNext;
         deadline = DateTime.MinValue;
-        log.Information($"Bulk desynth started: {queue.Count} item(s) queued.");
+        log.Information($"Bulk desynth started: {remaining.Count} item(s) queued.");
     }
 
     public void Stop(string reason)
     {
         if (!IsRunning) return;
-        log.Information($"Bulk desynth stopped: {reason}. {Processed} processed, {queue.Count} discarded.");
-        queue.Clear();
+        log.Information($"Bulk desynth stopped: {reason}. {Processed} processed, {remaining.Count} discarded.");
+        remaining.Clear();
         current = null;
         phase = Phase.Idle;
     }
@@ -124,16 +141,23 @@ public sealed class DesynthExecutor : IDisposable
                 if (condition[ConditionFlag.Occupied39] || condition[ConditionFlag.Casting])
                     return;
 
-                if (!queue.TryDequeue(out var next))
+                if (remaining.Count == 0)
                 {
                     phase = Phase.Done;
                     return;
                 }
+                // Pop head. Removing here (not on success) gives the UI the
+                // shrinking-list effect the user expects: as soon as we
+                // commit to processing slot X, X disappears from the table
+                // and re-appears above as "Current: ...".
+                var next = remaining[0];
+                remaining.RemoveAt(0);
                 current = next;
 
                 if (!TryGetInventoryItem(current.Value, out var itemPtr))
                 {
                     log.Warning($"Slot {current.Value.Slot} of {current.Value.Container} is empty or moved - skipping.");
+                    current = null;
                     phase = Phase.FireNext;
                     return;
                 }
@@ -157,9 +181,6 @@ public sealed class DesynthExecutor : IDisposable
                 args[1] = p1;
                 agent->AgentInterface.ReceiveEvent(&retval, args, 2, 1);
 
-                // Give the game up to AddonWaitTimeoutMs to actually enter
-                // the Occupied39 state. If it never does, the item rejected
-                // the desynth (e.g. skill mismatch slipped through filter).
                 deadline = DateTime.UtcNow.AddMilliseconds(config.AddonWaitTimeoutMs);
                 phase = Phase.WaitForBusy;
                 break;
@@ -197,7 +218,8 @@ public sealed class DesynthExecutor : IDisposable
             case Phase.PostCastCooldown:
             {
                 if (DateTime.UtcNow < deadline) return;
-                phase = queue.Count > 0 ? Phase.FireNext : Phase.Done;
+                current = null;
+                phase = remaining.Count > 0 ? Phase.FireNext : Phase.Done;
                 break;
             }
 
@@ -243,7 +265,7 @@ public sealed class DesynthExecutor : IDisposable
     public void Dispose()
     {
         framework.Update -= OnTick;
-        queue.Clear();
+        remaining.Clear();
         current = null;
         phase = Phase.Idle;
     }

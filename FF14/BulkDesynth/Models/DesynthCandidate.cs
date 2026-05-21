@@ -16,7 +16,7 @@ public readonly record struct DesynthCandidate(
     uint ItemId,
     /// <summary>Whether the slot holds a high-quality copy.</summary>
     bool IsHq,
-    /// <summary>Current spiritbond / collectability value in 0-1000 scale (game stores it as a ushort).</summary>
+    /// <summary>Current spiritbond / collectability value, 0-100 (matches the in-game percentage display).</summary>
     ushort Spiritbond,
     /// <summary>Item level - cached so the UI doesn't have to re-resolve every frame.</summary>
     ushort ItemLevel,
