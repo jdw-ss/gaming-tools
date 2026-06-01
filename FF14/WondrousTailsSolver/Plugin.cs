@@ -1,9 +1,9 @@
 using System;
 using Dalamud.Game.Command;
+using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using KamiToolKit;
 using WondrousTailsSolver.Services;
 using WondrousTailsSolver.UI;
 
@@ -11,12 +11,14 @@ namespace WondrousTailsSolver;
 
 /// <summary>
 /// Plugin entry point. Wires Dalamud services, owns the
-/// <see cref="AddonWeeklyBingoOverlay"/> lifecycle, and exposes a single
-/// /wts toggle command.
+/// <see cref="AddonWeeklyBingoOverlay"/> ImGui window, and exposes a
+/// single /wts toggle command.
 ///
-/// The overlay's actual work happens inside KamiToolKit's
-/// <c>AddonController</c> callbacks - this class doesn't need a per-frame
-/// tick.
+/// v0.1.2 swapped the original KamiToolKit native-node overlay for a
+/// Dalamud ImGui Window anchored to the WeeklyBingo addon. No more
+/// KamiToolKit bootstrap, no per-frame tick of our own, no extra
+/// shipped DLLs — the WindowSystem owns the rendering and the window's
+/// DrawConditions checks the addon visibility every frame.
 /// </summary>
 public sealed class Plugin : IDalamudPlugin
 {
@@ -26,35 +28,31 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] public static IPluginLog Log { get; private set; } = null!;
     [PluginService] public static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] public static IChatGui ChatGui { get; private set; } = null!;
-    [PluginService] public static IFramework Framework { get; private set; } = null!;
+    [PluginService] public static IGameGui GameGui { get; private set; } = null!;
 
     private const string CommandName = "/wts";
 
     private readonly Configuration config;
     private readonly BingoStateReader stateReader;
     private readonly AddonWeeklyBingoOverlay overlay;
+    private readonly WindowSystem windows = new("WondrousTailsOdds");
 
     public Plugin()
     {
         config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
-        // KamiToolKit's Services class is internal and uses [PluginService]
-        // injection driven by this single bootstrap call. Must be invoked
-        // before any KamiToolKit feature (AddonController, TextNode, ...).
-        KamiToolKitLibrary.Initialize(PluginInterface);
-
         stateReader = new BingoStateReader();
-        overlay = new AddonWeeklyBingoOverlay(config, stateReader, Log);
+        overlay = new AddonWeeklyBingoOverlay(config, stateReader, GameGui);
 
-        // AddonController.Enable() asserts main thread.
-        Framework.RunOnFrameworkThread(overlay.Enable);
+        windows.AddWindow(overlay);
+        PluginInterface.UiBuilder.Draw += windows.Draw;
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
             HelpMessage = "Toggle the Wondrous Tails probability overlay.",
         });
 
-        Log.Information("WondrousTailsSolver loaded.");
+        Log.Information("WondrousTailsOdds loaded.");
     }
 
     private void OnCommand(string command, string args)
@@ -62,11 +60,6 @@ public sealed class Plugin : IDalamudPlugin
         config.ShowOverlay = !config.ShowOverlay;
         PluginInterface.SavePluginConfig(config);
         ChatGui.Print($"[WTS] Overlay {(config.ShowOverlay ? "enabled" : "disabled")}.");
-
-        // Force an immediate repaint so the toggle takes effect even when
-        // the addon isn't currently firing Update events (e.g. the journal
-        // is open and idle).
-        Framework.RunOnFrameworkThread(overlay.ForceRefresh);
     }
 
     public void Dispose()
@@ -74,13 +67,14 @@ public sealed class Plugin : IDalamudPlugin
         try
         {
             CommandManager.RemoveHandler(CommandName);
+            PluginInterface.UiBuilder.Draw -= windows.Draw;
+            windows.RemoveAllWindows();
             overlay.Dispose();
-            KamiToolKitLibrary.Dispose();
             PluginInterface.SavePluginConfig(config);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to dispose WondrousTailsSolver cleanly");
+            Log.Error(ex, "Failed to dispose WondrousTailsOdds cleanly");
         }
     }
 }

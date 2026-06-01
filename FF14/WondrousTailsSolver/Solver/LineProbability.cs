@@ -51,6 +51,22 @@ internal static class LineProbability
         public double ShuffleTwoLines { get; init; }
         /// <summary>P(≥3 lines) on a freshly shuffled board with 9 stamps.</summary>
         public double ShuffleThreeLines { get; init; }
+
+        /// <summary>
+        /// Maximum number of completed lines achievable from this board if
+        /// the player gets to place every remaining stamp optimally — i.e.
+        /// the upper bound across every possible draw outcome. Derived from
+        /// the same enumeration as the "Current" probabilities; the
+        /// "Best" properties below collapse this to per-threshold 0/1.
+        /// </summary>
+        public int MaxLineCount { get; init; }
+
+        /// <summary>P(≥1 line) under perfect remaining-stamp placement: 1 if achievable, 0 otherwise.</summary>
+        public double BestOneLine => MaxLineCount >= 1 ? 1.0 : 0.0;
+        /// <summary>P(≥2 lines) under perfect remaining-stamp placement: 1 if achievable, 0 otherwise.</summary>
+        public double BestTwoLines => MaxLineCount >= 2 ? 1.0 : 0.0;
+        /// <summary>P(≥3 lines) under perfect remaining-stamp placement: 1 if achievable, 0 otherwise.</summary>
+        public double BestThreeLines => MaxLineCount >= 3 ? 1.0 : 0.0;
     }
 
     /// <summary>
@@ -81,6 +97,7 @@ internal static class LineProbability
             ShuffleOneLine = shuffle.AtLeast(1),
             ShuffleTwoLines = shuffle.AtLeast(2),
             ShuffleThreeLines = shuffle.AtLeast(3),
+            MaxLineCount = current.MaxObservedLines,
         };
     }
 
@@ -162,10 +179,19 @@ internal static class LineProbability
         // 4x4 with all 10 lines complete).
         private long b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10;
         private long total;
+        private int maxObserved;
+
+        /// <summary>
+        /// Highest line count seen across every enumerated board. This is
+        /// what "Best" / max-achievable reports: the upper bound under
+        /// perfect remaining-stamp placement.
+        /// </summary>
+        public int MaxObservedLines => maxObserved;
 
         public void Add(int lineCount)
         {
             total++;
+            if (lineCount > maxObserved) maxObserved = lineCount;
             switch (lineCount)
             {
                 case 0: b0++; break;

@@ -10,6 +10,51 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-01 — WondrousTailsOdds: floating window overlay + best-achievable column (v0.1.2)
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending (this session) — follow-on to 98f54ab (v0.1.1)
+
+### Changed
+
+- **User feedback after v0.1.1 in-game install**: the native TextNode rendered at the very top of the WeeklyBingo addon (`Position = (20, 12)`) clipped the addon's existing title bar — unreadable. User asked for a separate floating window anchored to the addon's left edge, plus a "best possible" column next to the current probabilities. Both shipped in v0.1.2.
+- **Dropped KamiToolKit entirely.** With the rendering moving to ImGui, we no longer need the native-node toolkit:
+  - Removed `KamiToolKit` and `Microsoft.Extensions.ObjectPool` `PackageReference`s from the csproj.
+  - Removed `KamiToolKit.dll` and `SixLabors.ImageSharp.dll` from the CI zip step (Dalamud bundles ObjectPool itself, so it never needed shipping; the other two were only present because KTK pulled them).
+  - Removed the `KamiToolKitLibrary.Initialize(PluginInterface)` / `Dispose()` bootstrap from `Plugin.cs`.
+- **`UI/AddonWeeklyBingoOverlay.cs` rewritten end-to-end.** Now extends Dalamud's `Window` rather than wrapping a KamiToolKit `AddonController`. `DrawConditions()` checks `IGameGui.GetAddonByName("WeeklyBingo")` for liveness; `PreDraw()` reads `addon->X / addon->Y` and calls `ImGui.SetNextWindowPos` so the overlay follows the journal when the user drags it. `IsOpen = true` and `RespectCloseHotkey = false` keep the window passively visible whenever the addon is.
+- **Solver gained `MaxLineCount`.** `LineProbability.Result` now exposes the maximum line count achievable across every enumerated future-board, plus three convenience properties `BestOneLine` / `BestTwoLines` / `BestThreeLines` that collapse it to per-threshold 0/1 probabilities. The "Current/Best" table renders Best as `(100%)` / `(0%)` in green/dark-red.
+- **`Plugin.cs` swapped to the standard Dalamud `WindowSystem` pattern**: `windows.AddWindow(overlay)` + `PluginInterface.UiBuilder.Draw += windows.Draw`. Dropped `IFramework` (no longer needed — the WindowSystem callback already runs on the framework thread). Added `IGameGui`. `/wts` no longer needs `ForceRefresh` because `DrawConditions()` is consulted every frame.
+- **Manifest bumped to 0.1.2.0**, csproj `<Version>` to 0.1.2.
+- **CI workflow zip step trimmed** to just the four plugin files (`WondrousTailsOdds.{dll,json,deps.json,pdb}`). The shipped zip dropped from ~954KB to roughly the plugin's own ~30KB.
+
+### Decisions
+
+- **ImGui Window over a redesigned native node.** Even if we tuned the KamiToolKit text node's `Position` to clear the addon's title bar, the readability would still be cramped against the journal art. A floating window with a proper background, table layout, and follow-the-addon positioning is a strict UX win and a strict dependency win.
+- **`MaxLineCount` exposed as a single integer** plus three derived boolean-style properties. The integer is the more honest representation (it carries information the booleans don't — "max is 3" tells you 3 lines are achievable; "BestThreeLines = 1.0" doesn't tell you 4 is impossible because 4 is *always* impossible at 9 stamps). Surface both: the integer in the window footer ("Max achievable: 3 line(s)"), the booleans next to the per-threshold rows.
+- **No new InternalName change.** v0.1.1's `WondrousTailsOdds` rename remains correct; v0.1.2 is just an internals refactor + feature add. Subscribers update in place.
+- **`Window.AlwaysAutoResize` + `ImGuiCond.Always` on SetNextWindowSize** to fight ImGui's "remember last user resize" — the overlay is positioned every frame, so we want size + position to be fully ours, every frame.
+- **`Window.IsOpen = true` permanently**, gating visibility via `DrawConditions()`. The alternative — flipping `IsOpen` from `IAddonLifecycle` events — would have worked but adds an extra service dependency and a redundant state machine.
+
+### Tried and abandoned
+
+- **First-pass cast `(AtkUnitBase*)gameGui.GetAddonByName(...)`** failed compilation because modern Dalamud wraps the return in `AtkUnitBasePtr`. Fixed to `(AtkUnitBase*)gameGui.GetAddonByName(...).Address`. Now documented in CLAUDE.md gotchas — the older d17 plugin examples online still show the direct cast.
+
+### Gotchas (added to `Gaming Tools/CLAUDE.md`)
+
+- `IGameGui.GetAddonByName` returns `AtkUnitBasePtr` in modern Dalamud, not the raw pointer. Use `.Address` and cast.
+- Anchoring an ImGui window to a game addon: extend `Window`, check `addon != null && addon->IsVisible` in `DrawConditions`, `ImGui.SetNextWindowPos(addon->X, addon->Y)` in `PreDraw`. `ImGuiCond.Always` on `SetNextWindowSize` is required to override the user-resize cache.
+- The Dalamud WindowSystem callback runs on the framework thread — dereferencing FFXIVClientStructs pointers from `Draw`/`PreDraw`/`DrawConditions` is safe without `Framework.RunOnFrameworkThread`.
+- The KamiToolKit notes in CLAUDE.md are now **historical** but kept verbatim — any future plugin that genuinely needs native-node rendering will hit the same surface.
+
+### Open threads
+
+- **No in-game v0.1.2 test yet from this session** — user will refresh the custom-repo row and re-verify. The native-node clipping is fixed by construction (we don't render a native node any more); the floating-window positioning needs eyeballing for the right `MarginFromAddon` and `WindowWidth`.
+- Window position will be off-screen if the WeeklyBingo addon is dragged hard against the left edge of the viewport — `MathF.Max(0, ...)` clamps to x=0 but the overlay would then overlap the addon. Acceptable for v0.1.2; a "snap to right side instead if no room on left" branch is a v0.2 idea if anyone hits it.
+- Solver scratch test (`MaxLineCount`) now covers 11 known boards; ran clean off-tree in /tmp.
+
+---
+
 ## 2026-06-01 — WondrousTailsSolver -> WondrousTailsOdds rename (v0.1.1)
 
 **Agent**: claude-opus-4-7

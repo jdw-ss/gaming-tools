@@ -4,17 +4,27 @@ A personal Dalamud plugin that overlays bingo-line completion
 probabilities on Final Fantasy XIV's weekly **Wondrous Tails** journal
 (Khloe's mini-game).
 
-For each board, the overlay shows:
+The overlay is a small floating window that opens to the left of the
+Wondrous Tails journal whenever you open Khloe's book in-game, and
+hides itself again when you close the journal. For each board it
+shows:
 
-- **P(≥1 line)**, **P(≥2 lines)**, **P(≥3 lines)** — the probability of
-  ending the week with at least that many completed rows / columns /
-  diagonals, given the stamps already placed and assuming the remaining
-  stamps land on random unstamped cells.
-- **Shuffle baseline** — the corresponding probabilities you'd see if
-  you used a Second Chance shuffle to redistribute every sticker from
-  scratch. Only shown while a shuffle is still cheap (≤ 7 placed).
-- Colour bands relative to the shuffle baseline so a glance tells you
-  whether to keep going or reshuffle.
+- A **Current / Best** table, one row per threshold:
+  - **P(≥1 line)** — probability of ending the week with at least one
+    completed row / column / diagonal, given the stamps already placed
+    and assuming the remaining stamps land on random unstamped cells.
+  - **P(≥2 lines)** and **P(≥3 lines)** likewise.
+  - The **Best** column shows the upper bound: `(100%)` if that
+    threshold is still achievable under perfect remaining-stamp
+    placement, `(0%)` if it's already mathematically out of reach.
+- **Shuffle baseline** — the corresponding probabilities you'd see on
+  a fresh board with 9 random stamps. Only shown while a shuffle is
+  still cheap (≤ 7 placed). Use this to answer "is my current board
+  above or below the long-run average?"
+- **Max achievable: N line(s)** in the footer — the hard combinatorial
+  ceiling for the current board.
+- Colour bands on the Current column relative to the shuffle baseline
+  so a glance tells you whether to keep going or reshuffle.
 
 ## Relationship to the d17 "Wondrous Tails Solver" plugin
 

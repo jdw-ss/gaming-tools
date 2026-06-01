@@ -28,10 +28,13 @@
       2. Standard %AppData%\XIVLauncher\addon\Hooks\dev\ (Windows + XIVLauncher).
       3. Explicit override via the DalamudLibPath property on the dotnet CLI.
 
-    KamiToolKit is pulled in as a NuGet package rather than a submodule.
-    The upstream EzWondrousTails repo was archived in part because its
-    relative `..\KamiToolKit\KamiToolKit.csproj` reference broke when the
-    submodule was removed - pinning to a NuGet version avoids that footgun.
+    No KamiToolKit dependency as of v0.1.2: the v0.1 plan rendered the
+    overlay as a native AtkTextNode injected into AddonWeeklyBingo via
+    KamiToolKit, but the result clipped the addon's title bar. v0.1.2
+    drops that approach entirely in favour of a Dalamud ImGui Window
+    anchored to the left edge of the addon, which is both more legible
+    and much cheaper to maintain. KamiToolKit and its transitive
+    SixLabors.ImageSharp + Microsoft.Extensions.ObjectPool refs are gone.
   -->
 
   <PropertyGroup>
@@ -44,7 +47,7 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <AssemblyName>WondrousTailsOdds</AssemblyName>
     <RootNamespace>WondrousTailsSolver</RootNamespace>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <!-- Required to dereference PlayerState / AddonWeeklyBingo pointers from
          FFXIVClientStructs. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -82,18 +85,6 @@
       <HintPath>$(DalamudLibPath)InteropGenerator.Runtime.dll</HintPath>
       <Private>false</Private>
     </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="KamiToolKit" Version="1.1.0" />
-    <!--
-      KamiToolKit's nodes implement Microsoft.Extensions.ObjectPool.IResettable.
-      The interface leaks into TextNode's metadata, so even code that only
-      constructs and disposes a TextNode needs the ObjectPool assembly on
-      hand for the C# compiler to bind method calls. Pinning to the same
-      major as the SDK (net10) avoids surprise downgrades.
-    -->
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

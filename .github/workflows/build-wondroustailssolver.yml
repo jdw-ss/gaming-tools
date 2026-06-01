@@ -81,20 +81,15 @@ jobs:
           mkdir -p "$OUT_DIR"
           cd FF14/WondrousTailsSolver/bin/Release/net10.0-windows
           rm -f "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip"
-          # Dependencies that Dalamud does NOT bundle in its latest.zip
-          # (verified by listing the refs folder after extraction):
-          #   - KamiToolKit.dll          - our own NuGet ref, not in Dalamud
-          #   - SixLabors.ImageSharp.dll - KamiToolKit transitive dep
-          # Microsoft.Extensions.ObjectPool IS bundled by Dalamud, so we
-          # don't ship it; trying to ship a duplicate copy can cause
-          # version conflicts with Dalamud's own.
+          # v0.1.2 has no third-party runtime dependencies beyond what
+          # Dalamud bundles itself - the overlay is a Dalamud ImGui Window
+          # rather than a native node, so KamiToolKit and SixLabors.ImageSharp
+          # are gone.
           zip -q "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip" \
             WondrousTailsOdds.dll \
             WondrousTailsOdds.json \
             WondrousTailsOdds.deps.json \
-            WondrousTailsOdds.pdb \
-            KamiToolKit.dll \
-            SixLabors.ImageSharp.dll
+            WondrousTailsOdds.pdb
           echo "Built zip contents:"
           unzip -l "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip"
 

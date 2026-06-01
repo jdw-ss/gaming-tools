@@ -1,240 +1,178 @@
 using System;
 using System.Globalization;
 using System.Numerics;
+using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using KamiToolKit.Classes;
-using KamiToolKit.Controllers;
-using KamiToolKit.Nodes;
-using Lumina.Text;
-using Lumina.Text.ReadOnly;
 using WondrousTailsSolver.Services;
 using WondrousTailsSolver.Solver;
 
 namespace WondrousTailsSolver.UI;
 
 /// <summary>
-/// Owns the lifecycle of a single <see cref="TextNode"/> attached to the
-/// game's <c>WeeklyBingo</c> addon. The node displays the row/column
-/// completion probabilities for the player's current Wondrous Tails board.
+/// Floating ImGui window that displays Wondrous Tails completion
+/// probabilities. The window is anchored to the left edge of the in-game
+/// <c>WeeklyBingo</c> addon and is only visible while that addon is open.
 ///
-/// We attach on the addon's PostSetup, refresh on PostRefresh + PostUpdate
-/// (which fires whenever the addon's "requested update" runs — covers the
-/// player placing a sticker, shuffling, etc.), and detach on PreFinalize.
-///
-/// KamiToolKit's <see cref="AddonController{T}"/> handles event
-/// (un)registration and main-thread assertions for us; we just plug in
-/// the callbacks.
+/// v0.1 rendered this inside the addon via a native KamiToolKit
+/// <c>AtkTextNode</c>. That clipped the addon's existing title bar at
+/// <c>Position = (20, 12)</c> and was unreadable. v0.1.2 replaces it
+/// with this ImGui window, which sits cleanly beside the journal and
+/// removes the entire KamiToolKit dependency chain (KamiToolKit,
+/// SixLabors.ImageSharp, Microsoft.Extensions.ObjectPool).
 /// </summary>
-internal sealed class AddonWeeklyBingoOverlay : IDisposable
+internal sealed class AddonWeeklyBingoOverlay : Window, IDisposable
 {
-    /// <summary>Internal addon name as used by the game's addon table.</summary>
     private const string AddonName = "WeeklyBingo";
 
-    /// <summary>
-    /// Above this fraction of the shuffle baseline we paint green
-    /// (current trajectory is better than the long-run average).
-    /// </summary>
-    private const double GreenRatio = 1.05;
+    /// <summary>Width of the floating window, in unscaled ImGui pixels.</summary>
+    private const float WindowWidth = 280f;
 
-    /// <summary>
-    /// Below this fraction of the shuffle baseline we paint red
-    /// (current trajectory is noticeably worse than the baseline).
-    /// </summary>
-    private const double RedRatio = 0.95;
-
-    /// <summary>
-    /// A probability this close to certainty paints "bright" regardless
-    /// of the shuffle baseline. Mirrors the original plugin's behaviour
-    /// of glowing the line counts that are effectively locked in.
-    /// </summary>
-    private const double BrightThreshold = 0.999;
+    /// <summary>Gap between the right edge of our window and the addon's left edge.</summary>
+    private const float MarginFromAddon = 8f;
 
     private readonly Configuration config;
     private readonly BingoStateReader stateReader;
-    private readonly IPluginLog log;
+    private readonly IGameGui gameGui;
 
-    private AddonController<AddonWeeklyBingo>? controller;
-    private TextNode? overlayText;
-    private bool attachFailed;
-
-    public AddonWeeklyBingoOverlay(Configuration config, BingoStateReader stateReader, IPluginLog log)
+    public AddonWeeklyBingoOverlay(
+        Configuration config,
+        BingoStateReader stateReader,
+        IGameGui gameGui)
+        : base("Wondrous Tails Odds##wts-overlay",
+               ImGuiWindowFlags.NoResize |
+               ImGuiWindowFlags.NoCollapse |
+               ImGuiWindowFlags.NoFocusOnAppearing |
+               ImGuiWindowFlags.NoNav |
+               ImGuiWindowFlags.NoSavedSettings |
+               ImGuiWindowFlags.AlwaysAutoResize)
     {
         this.config = config;
         this.stateReader = stateReader;
-        this.log = log;
+        this.gameGui = gameGui;
+
+        // We position ourselves every frame from the addon's coordinates,
+        // so don't let the user drag-move us and don't restore from any
+        // persisted ImGui ini state.
+        RespectCloseHotkey = false;
+        DisableWindowSounds = true;
+        ShowCloseButton = false;
+        IsOpen = true;
     }
 
     /// <summary>
-    /// Begin listening for the WeeklyBingo addon. Safe to call once at
-    /// plugin construction; the controller covers all subsequent
-    /// open/close cycles.
-    ///
-    /// Marked unsafe because converting the OnSetup/OnFinalize/OnRefresh/
-    /// OnUpdate method groups to KamiToolKit's
-    /// <c>AddonControllerEvent</c> delegate (which takes a <c>T*</c>)
-    /// counts as pointer use under the C# language rules.
+    /// Only draw when the user hasn't disabled the overlay AND the game's
+    /// WeeklyBingo addon is currently visible. The pointer check is the
+    /// authoritative test for "is the journal on screen right now?" — we
+    /// don't track addon lifecycle separately because Dalamud already
+    /// renders us on the framework thread, where this read is safe.
     /// </summary>
-    public unsafe void Enable()
+    public override unsafe bool DrawConditions()
     {
-        if (controller is not null) return;
-
-        controller = new AddonController<AddonWeeklyBingo>
-        {
-            AddonName = AddonName,
-            OnSetup = OnSetup,
-            OnFinalize = OnFinalize,
-            OnRefresh = OnRefresh,
-            OnUpdate = OnUpdate,
-        };
-        controller.Enable();
+        if (!config.ShowOverlay) return false;
+        var addon = (AtkUnitBase*)gameGui.GetAddonByName(AddonName).Address;
+        return addon != null && addon->IsVisible;
     }
 
     /// <summary>
-    /// Force the overlay text to repaint with the latest state. Called
-    /// when the user toggles the overlay via /wts so the change takes
-    /// effect without waiting for the next addon Update.
+    /// Anchor the window to the left side of the addon. Runs every frame
+    /// so the overlay follows when the user drags the journal around.
     /// </summary>
-    public void ForceRefresh() => RefreshText();
-
-    private unsafe void OnSetup(AddonWeeklyBingo* addon)
+    public override unsafe void PreDraw()
     {
-        try
-        {
-            overlayText = new TextNode
-            {
-                Size = new Vector2(420f, 28f),
-                Position = new Vector2(20f, 12f),
-                FontSize = 14,
-                AlignmentType = AlignmentType.Left,
-                TextColor = ColorWhite,
-                TextOutlineColor = ColorOutline,
-                String = default,
-                IsVisible = true,
-            };
-            overlayText.AddTextFlags(TextFlags.Edge);
-            overlayText.AttachNode((AtkUnitBase*)addon);
-            attachFailed = false;
-            RefreshText();
-        }
-        catch (Exception ex)
-        {
-            attachFailed = true;
-            log.Error(ex, "WondrousTailsSolver: failed to attach overlay node to WeeklyBingo. Overlay disabled for this open of the addon.");
-            DisposeOverlayNode();
-        }
+        var addon = (AtkUnitBase*)gameGui.GetAddonByName(AddonName).Address;
+        if (addon == null) return;
+
+        var addonX = addon->X;
+        var addonY = addon->Y;
+
+        var x = MathF.Max(0f, addonX - (WindowWidth + MarginFromAddon));
+        ImGui.SetNextWindowPos(new Vector2(x, addonY));
+        ImGui.SetNextWindowSize(new Vector2(WindowWidth, 0f), ImGuiCond.Always);
     }
 
-    private unsafe void OnFinalize(AddonWeeklyBingo* _)
+    public override void Draw()
     {
-        DisposeOverlayNode();
-    }
-
-    private unsafe void OnRefresh(AddonWeeklyBingo* _) => RefreshText();
-
-    private unsafe void OnUpdate(AddonWeeklyBingo* _) => RefreshText();
-
-    private void RefreshText()
-    {
-        if (overlayText is null || attachFailed) return;
-
-        if (!config.ShowOverlay)
-        {
-            overlayText.IsVisible = false;
-            return;
-        }
-
         var board = stateReader.ReadBoard();
         if (board is null)
         {
-            // Addon can be inspected without a journal; render nothing in
-            // that case rather than leaving stale text from a previous open.
-            overlayText.IsVisible = false;
+            ImGui.TextDisabled("No Wondrous Tails journal held.");
             return;
         }
 
-        var result = LineProbability.Compute(board.Value);
-        overlayText.TextColor = PickHeadlineColour(result);
-        overlayText.String = FormatOverlay(result);
-        overlayText.IsVisible = true;
-    }
-
-    /// <summary>
-    /// Build the overlay text. Three lines, one per completion threshold,
-    /// with the current probability and (when meaningful) the shuffle
-    /// baseline for comparison. Plain text — colouring is applied to the
-    /// whole node based on the most informative threshold.
-    /// </summary>
-    private static ReadOnlySeString FormatOverlay(LineProbability.Result r)
-    {
+        var r = LineProbability.Compute(board.Value);
+        var stamps = BingoBoard.StampCount(board.Value);
         var inv = CultureInfo.InvariantCulture;
-        var builder = new SeStringBuilder();
 
-        builder.Append("Wondrous Tails: ");
-        builder.Append($"P(1+)={r.CurrentOneLine.ToString("P1", inv)}");
-        builder.Append("  ");
-        builder.Append($"P(2+)={r.CurrentTwoLines.ToString("P1", inv)}");
-        builder.Append("  ");
-        builder.Append($"P(3+)={r.CurrentThreeLines.ToString("P1", inv)}");
+        if (ImGui.BeginTable("##wts-prob", 3, ImGuiTableFlags.SizingStretchProp))
+        {
+            ImGui.TableSetupColumn(string.Empty, ImGuiTableColumnFlags.WidthStretch, 1.4f);
+            ImGui.TableSetupColumn("Current",    ImGuiTableColumnFlags.WidthStretch, 1.0f);
+            ImGui.TableSetupColumn("Best",       ImGuiTableColumnFlags.WidthStretch, 1.0f);
+            ImGui.TableHeadersRow();
+
+            DrawRow("P(\u22651 line)",  r.CurrentOneLine,    r.BestOneLine,    r.ShuffleApplicable, r.ShuffleOneLine,    inv);
+            DrawRow("P(\u22652 lines)", r.CurrentTwoLines,   r.BestTwoLines,   r.ShuffleApplicable, r.ShuffleTwoLines,   inv);
+            DrawRow("P(\u22653 lines)", r.CurrentThreeLines, r.BestThreeLines, r.ShuffleApplicable, r.ShuffleThreeLines, inv);
+
+            ImGui.EndTable();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
 
         if (r.ShuffleApplicable)
         {
-            builder.Append("   |   Shuffle baseline: ");
-            builder.Append($"{r.ShuffleOneLine.ToString("P1", inv)} / ");
-            builder.Append($"{r.ShuffleTwoLines.ToString("P1", inv)} / ");
-            builder.Append($"{r.ShuffleThreeLines.ToString("P1", inv)}");
+            ImGui.TextDisabled("Shuffle baseline (9 random stamps):");
+            ImGui.Text($"  P(1+) {Format(r.ShuffleOneLine, inv)}   " +
+                       $"P(2+) {Format(r.ShuffleTwoLines, inv)}   " +
+                       $"P(3+) {Format(r.ShuffleThreeLines, inv)}");
+            ImGui.Spacing();
         }
 
-        return builder.ToReadOnlySeString();
+        ImGui.TextDisabled($"{stamps} of {BingoBoard.MaxStamps} stamps placed");
+        ImGui.TextDisabled($"Max achievable: {r.MaxLineCount} line(s)");
     }
 
-    /// <summary>
-    /// Pick a single colour for the whole overlay based on the most
-    /// generous (P≥1) threshold. The colour answers "am I trending above
-    /// or below the long-run average?" at a glance; the actual numbers
-    /// remain in the text for anyone who wants the detail.
-    /// </summary>
-    private static Vector4 PickHeadlineColour(LineProbability.Result r)
+    private static void DrawRow(string label, double current, double best,
+        bool shuffleApplicable, double shuffle, CultureInfo inv)
     {
-        if (r.CurrentOneLine >= BrightThreshold) return ColorBright;
-        if (!r.ShuffleApplicable) return ColorWhite;
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(label);
 
-        // Avoid divide-by-zero on a degenerate baseline (shouldn't happen
-        // in practice — the shuffle baseline always has some line in 9 of 16).
-        if (r.ShuffleOneLine <= 0.0) return ColorWhite;
+        ImGui.TableNextColumn();
+        ImGui.TextColored(PickCurrentColor(current, shuffleApplicable, shuffle), Format(current, inv));
 
-        var ratio = r.CurrentOneLine / r.ShuffleOneLine;
-        if (ratio >= GreenRatio) return ColorGreen;
-        if (ratio >= RedRatio) return ColorYellow;
-        if (r.CurrentOneLine > 0.001) return ColorRed;
+        ImGui.TableNextColumn();
+        var bestColor = best >= 0.5 ? ColorGreen : ColorDarkRed;
+        ImGui.TextColored(bestColor, "(" + Format(best, inv) + ")");
+    }
+
+    private static string Format(double p, CultureInfo inv) => p.ToString("P1", inv);
+
+    private static Vector4 PickCurrentColor(double current, bool shuffleApplicable, double shuffle)
+    {
+        if (current >= 0.999) return ColorBright;
+        if (!shuffleApplicable || shuffle <= 0.0) return ColorWhite;
+
+        var ratio = current / shuffle;
+        if (ratio >= 1.05) return ColorGreen;
+        if (ratio >= 0.95) return ColorYellow;
+        if (current > 0.001) return ColorRed;
         return ColorDarkRed;
-    }
-
-    private void DisposeOverlayNode()
-    {
-        if (overlayText is null) return;
-        try
-        {
-            overlayText.Dispose();
-        }
-        catch (Exception ex)
-        {
-            log.Warning(ex, "WondrousTailsSolver: overlay node Dispose threw; continuing.");
-        }
-        overlayText = null;
     }
 
     public void Dispose()
     {
-        DisposeOverlayNode();
-        controller?.Dispose();
-        controller = null;
+        // Nothing held that ImGui doesn't reclaim itself; we don't register
+        // anything outside the Dalamud WindowSystem.
     }
 
     // Colour palette. Vector4 = (R, G, B, A), each in [0, 1].
     private static readonly Vector4 ColorWhite   = new(1.00f, 1.00f, 1.00f, 1.00f);
-    private static readonly Vector4 ColorOutline = new(0.00f, 0.00f, 0.00f, 1.00f);
     private static readonly Vector4 ColorBright  = new(1.00f, 0.95f, 0.55f, 1.00f);
     private static readonly Vector4 ColorGreen   = new(0.40f, 0.95f, 0.45f, 1.00f);
     private static readonly Vector4 ColorYellow  = new(0.95f, 0.90f, 0.40f, 1.00f);

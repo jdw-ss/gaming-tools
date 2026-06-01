@@ -75,14 +75,24 @@ See `~/Claude Projects/docs/PROJECT_INDEX.md` for the full cross-project map.
 - Desynth invocation: `AgentSalvage.Instance()->SalvageItem(InventoryItem*)` followed by `agent->AgentInterface.ReceiveEvent(&retval, [Int 0, Bool 1], 2, 1)`. The `Bool=1` bypasses the SelectYesno warning dialog — pre-filter HQ / high-spiritbond items if you want the warning's safety semantics back.
 - Cast pacing: gate on `ICondition[ConditionFlag.Occupied39]` (the game's busy flag during cast + animation). No need to poll addon visibility.
 
-### KamiToolKit (Wondrous Tails native overlay)
+### KamiToolKit (historical — removed from WondrousTailsOdds in v0.1.2)
 
-- KamiToolKit is consumed as a **NuGet PackageReference** (`KamiToolKit` 1.1.0+), never as a git submodule. The archived upstream `EzWondrousTails` broke partly because its `..\KamiToolKit\KamiToolKit.csproj` relative reference died when the submodule was dropped. Pinning to NuGet sidesteps that footgun entirely.
-- Bootstrap from the host plugin with **one call**: `KamiToolKitLibrary.Initialize(PluginInterface)` in the plugin constructor; `KamiToolKitLibrary.Dispose()` in `Dispose()`. The library's internal `Services` class is `[PluginService]`-injected from inside KamiToolKit — the host doesn't need to expose `IGameGui`, `IAddonLifecycle`, etc. just for KTK.
-- `AddonController<T>` uses **init-only** property setters (`AddonName`, `OnSetup`, `OnFinalize`, `OnRefresh`, `OnUpdate`). Build with an object initialiser, then call `.Enable()` on the framework thread. `Enable()` asserts main thread and will throw if called from a background thread.
-- The KamiToolKit DLL must be **bundled in the shipped plugin zip** alongside the host DLL — Dalamud doesn't resolve KamiToolKit for you. So must `SixLabors.ImageSharp.dll`, which KamiToolKit pulls in transitively and which Dalamud does NOT bundle. `Microsoft.Extensions.ObjectPool.dll` IS bundled by Dalamud — don't ship a second copy or you risk version conflicts. To check what's bundled: extract `goatcorp/dalamud-distrib/latest.zip` and look in the resulting folder. `build-wondroustailssolver.yml` lists the must-ship DLLs explicitly in the zip step.
+The notes here document what we learned while integrating KamiToolKit. **WondrousTailsOdds dropped KamiToolKit in v0.1.2** in favour of a plain Dalamud ImGui `Window` anchored to the addon (cleaner, no extra DLLs to ship). Keep these notes because any future plugin that *does* need to draw native nodes into a game addon will run into the same surface.
+
+- KamiToolKit must be consumed as a **NuGet PackageReference** (`KamiToolKit` 1.1.0+), never as a git submodule. The upstream `EzWondrousTails` broke partly because its `..\KamiToolKit\KamiToolKit.csproj` relative reference died when the submodule was dropped. NuGet sidesteps that footgun.
+- Bootstrap from the host plugin with **one call**: `KamiToolKitLibrary.Initialize(PluginInterface)` in the constructor; `KamiToolKitLibrary.Dispose()` in `Dispose()`. The library's internal `Services` class is `[PluginService]`-injected from inside KamiToolKit — the host doesn't need to expose `IGameGui`, `IAddonLifecycle`, etc. just for KTK.
+- `AddonController<T>` uses **init-only** property setters (`AddonName`, `OnSetup`, `OnFinalize`, `OnRefresh`, `OnUpdate`). Build with an object initialiser, then call `.Enable()` on the framework thread. `Enable()` asserts main thread.
+- The KamiToolKit DLL must be **bundled in the shipped plugin zip** alongside the host DLL — Dalamud doesn't resolve KamiToolKit for you. So must `SixLabors.ImageSharp.dll`, which KamiToolKit pulls in transitively. `Microsoft.Extensions.ObjectPool.dll` IS bundled by Dalamud — don't ship a second copy or you risk version conflicts.
 - `TextNode.String` is `Lumina.Text.ReadOnly.ReadOnlySeString`. Build text with `new SeStringBuilder().Append(...).ToReadOnlySeString()` (from `Lumina.Text`). Plain `string` does not implicitly convert.
-- `Position`, `IsVisible`, `Size`, `TextColor`, `TextOutlineColor`, `FontSize`, `AlignmentType` live on `NodeBase` (and thus `TextNode`). Use `IsVisible` to hide rather than detach when the user toggles the overlay off — detaching mid-addon-lifetime defeats the controller's lifecycle assumptions.
+- `Position`, `IsVisible`, `Size`, `TextColor`, `TextOutlineColor`, `FontSize`, `AlignmentType` live on `NodeBase` (and thus `TextNode`).
+
+### Addon-anchored ImGui windows (the v0.1.2 WondrousTailsOdds pattern)
+
+- **`IGameGui.GetAddonByName(name)` returns `Dalamud.Game.NativeWrapper.AtkUnitBasePtr`**, NOT a raw `AtkUnitBase*`. Cast with `(AtkUnitBase*)gameGui.GetAddonByName(name).Address`. Easy to miss because older docs / older d17 plugin code show the direct pointer return.
+- **For a window that follows an addon**, extend Dalamud's `Window`, override `DrawConditions()` to check `addon != null && addon->IsVisible`, and set position from `addon->X / addon->Y` inside `PreDraw()` via `ImGui.SetNextWindowPos(...)`. This automatically tracks the addon being dragged. Use `AlwaysAutoResize` so the window snaps to its content rather than fighting your position.
+- **`ImGuiCond.Always`** on `SetNextWindowSize` is what overrides ImGui's "remember last user resize" behaviour. Without it the first resize sticks.
+- **The Dalamud `WindowSystem` runs on the framework thread**, so dereferencing `AtkUnitBase*` inside `Draw()` / `DrawConditions()` / `PreDraw()` is safe without `Framework.RunOnFrameworkThread` gymnastics.
+- **`Window.RespectCloseHotkey = false` and `ShowCloseButton = false`** is the right config for a passive overlay (no Escape-to-close, no X button). Toggle visibility from a config flag the user's slash command flips.
 
 ### Plugin naming and InternalName collisions
 
