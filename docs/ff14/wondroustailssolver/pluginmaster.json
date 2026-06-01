@@ -3,7 +3,7 @@
     "Author": "John Wilson (jdw-ss)",
     "Name": "Wondrous Tails Odds",
     "InternalName": "WondrousTailsOdds",
-    "AssemblyVersion": "0.1.1.0",
+    "AssemblyVersion": "0.1.2.0",
     "Description": "Overlays row, column, and diagonal completion probabilities on FFXIV's weekly Wondrous Tails journal. Shows P(≥1 line), P(≥2 lines), P(≥3 lines) given the stamps already placed, and — while you still have a Second Chance shuffle available — the shuffle-average baseline so you can tell whether your current board is above or below average.\n\nPersonal alternative to the actively-maintained d17 \"Wondrous Tails Solver\" (MidoriKami / daemitus). Independent clean-room implementation, MIT licensed.\n\nUsage:\n  /wts         - toggle the in-journal overlay on/off\n",
     "ApplicableVersion": "any",
     "Tags": [
@@ -22,7 +22,7 @@
     "DownloadLinkUpdate": "https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/latest.zip",
     "DownloadLinkTesting": "https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/latest.zip",
     "DownloadCount": 0,
-    "LastUpdate": 1780343639,
+    "LastUpdate": 1780350900,
     "IsHide": false,
     "IsTestingExclusive": false
   }
