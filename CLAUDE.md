@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Publishing-infrastructure monorepo for FFXIV Dalamud plugins. Each plugin lives in its own subfolder; CI builds the plugin and publishes the `.zip` + `pluginmaster.json` to GitHub Pages under a dedicated subpath so users can subscribe per-plugin. Currently active plugin: **BulkDesynth**. Status: **live**.
+Publishing-infrastructure monorepo for FFXIV Dalamud plugins. Each plugin lives in its own subfolder; CI builds the plugin and publishes the `.zip` + `pluginmaster.json` to GitHub Pages under a dedicated subpath so users can subscribe per-plugin. Currently active plugins: **BulkDesynth**, **WondrousTailsSolver**. Status: **live**.
 
 ## Stack
 
@@ -17,6 +17,7 @@ Plugin builds run on CI, not locally. Local C# builds require:
 
 ```bash
 dotnet build FF14/BulkDesynth/BulkDesynth.csproj -c Release
+dotnet build FF14/WondrousTailsSolver/WondrousTailsSolver.csproj -c Release
 ```
 
 There is no local UI to preview.
@@ -38,6 +39,7 @@ None (build-time only).
 
 - **Push to `main`** → CI builds → commits `latest.zip` + `pluginmaster.json` under `docs/<plugin-subpath>/` → GitHub Pages publishes.
 - **Subscribe URL for BulkDesynth**: `https://jdw-ss.github.io/gaming-tools/ff14/bulkdesynth/pluginmaster.json`
+- **Subscribe URL for WondrousTailsSolver**: `https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/pluginmaster.json`
 
 ## Companion docs
 
@@ -72,3 +74,12 @@ See `~/Claude Projects/docs/PROJECT_INDEX.md` for the full cross-project map.
 
 - Desynth invocation: `AgentSalvage.Instance()->SalvageItem(InventoryItem*)` followed by `agent->AgentInterface.ReceiveEvent(&retval, [Int 0, Bool 1], 2, 1)`. The `Bool=1` bypasses the SelectYesno warning dialog — pre-filter HQ / high-spiritbond items if you want the warning's safety semantics back.
 - Cast pacing: gate on `ICondition[ConditionFlag.Occupied39]` (the game's busy flag during cast + animation). No need to poll addon visibility.
+
+### KamiToolKit (Wondrous Tails native overlay)
+
+- KamiToolKit is consumed as a **NuGet PackageReference** (`KamiToolKit` 1.1.0+), never as a git submodule. The archived upstream `EzWondrousTails` broke partly because its `..\KamiToolKit\KamiToolKit.csproj` relative reference died when the submodule was dropped. Pinning to NuGet sidesteps that footgun entirely.
+- Bootstrap from the host plugin with **one call**: `KamiToolKitLibrary.Initialize(PluginInterface)` in the plugin constructor; `KamiToolKitLibrary.Dispose()` in `Dispose()`. The library's internal `Services` class is `[PluginService]`-injected from inside KamiToolKit — the host doesn't need to expose `IGameGui`, `IAddonLifecycle`, etc. just for KTK.
+- `AddonController<T>` uses **init-only** property setters (`AddonName`, `OnSetup`, `OnFinalize`, `OnRefresh`, `OnUpdate`). Build with an object initialiser, then call `.Enable()` on the framework thread. `Enable()` asserts main thread and will throw if called from a background thread.
+- The KamiToolKit DLL must be **bundled in the shipped plugin zip** alongside the host DLL — Dalamud doesn't resolve KamiToolKit for you. So must `SixLabors.ImageSharp.dll`, which KamiToolKit pulls in transitively and which Dalamud does NOT bundle. `Microsoft.Extensions.ObjectPool.dll` IS bundled by Dalamud — don't ship a second copy or you risk version conflicts. To check what's bundled: extract `goatcorp/dalamud-distrib/latest.zip` and look in the resulting folder. `build-wondroustailssolver.yml` lists the must-ship DLLs explicitly in the zip step.
+- `TextNode.String` is `Lumina.Text.ReadOnly.ReadOnlySeString`. Build text with `new SeStringBuilder().Append(...).ToReadOnlySeString()` (from `Lumina.Text`). Plain `string` does not implicitly convert.
+- `Position`, `IsVisible`, `Size`, `TextColor`, `TextOutlineColor`, `FontSize`, `AlignmentType` live on `NodeBase` (and thus `TextNode`). Use `IsVisible` to hide rather than detach when the user toggles the overlay off — detaching mid-addon-lifetime defeats the controller's lifecycle assumptions.

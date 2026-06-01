@@ -1,0 +1,20 @@
+{
+  "Author": "John Wilson (jdw-ss)",
+  "Name": "Wondrous Tails Solver",
+  "InternalName": "WondrousTailsSolver",
+  "AssemblyVersion": "0.1.0.0",
+  "Description": "Overlays row, column, and diagonal completion probabilities on FFXIV's weekly Wondrous Tails journal. Shows P(\u22651 line), P(\u22652 lines), P(\u22653 lines) given the stamps already placed, and \u2014 while you still have a Second Chance shuffle available \u2014 the shuffle-average baseline so you can tell whether your current board is above or below average.\n\nClean-room reimplementation of the archived MidoriKami/EzWondrousTails. MIT licensed.\n\nUsage:\n  /wts         - toggle the in-journal overlay on/off\n",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "wondrous tails",
+    "weekly",
+    "bingo",
+    "khloe",
+    "utility",
+    "overlay"
+  ],
+  "Punchline": "See your Wondrous Tails completion odds at a glance.",
+  "RepoUrl": "https://github.com/jdw-ss/gaming-tools",
+  "DalamudApiLevel": 15,
+  "AcceptsFeedback": true
+}

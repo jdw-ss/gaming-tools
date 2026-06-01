@@ -1,0 +1,137 @@
+# Builds the WondrousTailsSolver Dalamud plugin on ubuntu-latest whenever its
+# source changes, and commits the new zip + refreshed pluginmaster.json into
+# `docs/ff14/wondroustailssolver/` so GitHub Pages serves it to subscribers.
+#
+# Subscribe URL (paste into Dalamud Settings -> Experimental -> Custom
+# Plugin Repositories):
+#   https://<owner>.github.io/<repo>/ff14/wondroustailssolver/pluginmaster.json
+#
+# Mirrors `build-bulkdesynth.yml` exactly. Keep the two workflows in sync
+# when bumping shared steps (e.g. dotnet SDK version, dalamud-distrib URL).
+
+name: Build WondrousTailsSolver
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "FF14/WondrousTailsSolver/**"
+      - ".github/workflows/build-wondroustailssolver.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write # commits the rebuilt artifacts back to main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Read plugin AssemblyVersion
+        id: version
+        run: |
+          MANIFEST_PATH="FF14/WondrousTailsSolver/WondrousTailsSolver.json"
+          VERSION=$(jq -r '.AssemblyVersion' "$MANIFEST_PATH")
+          echo "assembly_version=$VERSION" >> $GITHUB_OUTPUT
+          SEMVER=$(echo "$VERSION" | awk -F. '{ printf "%s.%s.%s", $1, $2, $3 }')
+          echo "semver=$SEMVER" >> $GITHUB_OUTPUT
+          echo "WondrousTailsSolver version: $VERSION (semver: $SEMVER)"
+
+      - name: Download Dalamud reference assemblies
+        run: |
+          mkdir -p FF14/WondrousTailsSolver/.refs
+          # goatcorp/dalamud-distrib ships the same reference DLLs that
+          # XIVLauncher installs locally. `latest.zip` tracks Dalamud's
+          # release branch (matching DalamudApiLevel 15 currently).
+          curl -L -o /tmp/dalamud.zip https://goatcorp.github.io/dalamud-distrib/latest.zip
+          unzip -q /tmp/dalamud.zip -d FF14/WondrousTailsSolver/.refs
+          # Sanity-check the critical DLLs landed.
+          test -f FF14/WondrousTailsSolver/.refs/Dalamud.dll
+          test -f FF14/WondrousTailsSolver/.refs/FFXIVClientStructs.dll
+          test -f FF14/WondrousTailsSolver/.refs/Lumina.Excel.dll
+          test -f FF14/WondrousTailsSolver/.refs/Dalamud.Bindings.ImGui.dll
+          echo "Dalamud refs extracted OK ($(ls FF14/WondrousTailsSolver/.refs | wc -l) files)."
+
+      - name: Build (Release)
+        run: |
+          dotnet restore FF14/WondrousTailsSolver/WondrousTailsSolver.csproj
+          dotnet build FF14/WondrousTailsSolver/WondrousTailsSolver.csproj \
+            --configuration Release \
+            --no-restore
+
+      - name: Package zip
+        run: |
+          OUT_DIR="docs/ff14/wondroustailssolver"
+          mkdir -p "$OUT_DIR"
+          cd FF14/WondrousTailsSolver/bin/Release/net10.0-windows
+          rm -f "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip"
+          # Dependencies that Dalamud does NOT bundle in its latest.zip
+          # (verified by listing the refs folder after extraction):
+          #   - KamiToolKit.dll          - our own NuGet ref, not in Dalamud
+          #   - SixLabors.ImageSharp.dll - KamiToolKit transitive dep
+          # Microsoft.Extensions.ObjectPool IS bundled by Dalamud, so we
+          # don't ship it; trying to ship a duplicate copy can cause
+          # version conflicts with Dalamud's own.
+          zip -q "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip" \
+            WondrousTailsSolver.dll \
+            WondrousTailsSolver.json \
+            WondrousTailsSolver.deps.json \
+            WondrousTailsSolver.pdb \
+            KamiToolKit.dll \
+            SixLabors.ImageSharp.dll
+          echo "Built zip contents:"
+          unzip -l "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip"
+
+      - name: Refresh pluginmaster.json
+        env:
+          ASSEMBLY_VERSION: ${{ steps.version.outputs.assembly_version }}
+          OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          MANIFEST=$(cat FF14/WondrousTailsSolver/WondrousTailsSolver.json)
+          NOW=$(date +%s)
+          # GitHub Pages project-page URL: https://<owner>.github.io/<repo>/
+          # We append the plugin's path (ff14/wondroustailssolver/) so
+          # multiple plugins can share the same Pages site without clashing.
+          BASE_URL="https://${OWNER}.github.io/${REPO_NAME}/ff14/wondroustailssolver"
+          DOWNLOAD_URL="${BASE_URL}/latest.zip"
+          jq -n --argjson m "$MANIFEST" --arg url "$DOWNLOAD_URL" --argjson now "$NOW" '[
+            ($m + {
+              Punchline: ($m.Punchline // "See your Wondrous Tails completion odds at a glance."),
+              DownloadLinkInstall: $url,
+              DownloadLinkUpdate: $url,
+              DownloadLinkTesting: $url,
+              DownloadCount: 0,
+              LastUpdate: $now,
+              IsHide: false,
+              IsTestingExclusive: false
+            })
+          ]' > docs/ff14/wondroustailssolver/pluginmaster.json
+          echo "Refreshed pluginmaster.json:"
+          cat docs/ff14/wondroustailssolver/pluginmaster.json
+
+      - name: Commit + push (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Stage first so untracked-new-files are visible to the change
+          # detection. `git diff` (non --cached) only compares against
+          # tracked files, so it reports "clean" for brand-new paths and
+          # the first build would never commit anything.
+          git add docs/ff14/wondroustailssolver/latest.zip docs/ff14/wondroustailssolver/pluginmaster.json
+          if git diff --cached --quiet; then
+            echo "docs/ff14/wondroustailssolver/ unchanged - skipping commit."
+            exit 0
+          fi
+          git commit -m "ci: rebuild WondrousTailsSolver v${{ steps.version.outputs.semver }}" \
+            -m "Auto-built on ubuntu-latest by .github/workflows/build-wondroustailssolver.yml. GitHub Pages will pick up the new zip on its next deploy cycle (usually under a minute)."
+          git push

@@ -10,6 +10,62 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-01 — Bootstrap WondrousTailsSolver plugin (v0.1.0)
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending (user will commit + push after local build verification)
+
+### Changed
+
+- Added a second plugin to the monorepo: `FF14/WondrousTailsSolver/`. Clean-room reimplementation of the archived `MidoriKami/EzWondrousTails`. Overlays row/column/diagonal completion probabilities onto the in-game Wondrous Tails journal.
+- New files:
+  - `FF14/WondrousTailsSolver/WondrousTailsSolver.csproj` — mirrors BulkDesynth's TFM + ref pattern; adds `KamiToolKit` 1.1.0 NuGet PackageReference.
+  - `FF14/WondrousTailsSolver/WondrousTailsSolver.json` — manifest, `DalamudApiLevel: 15`, `AssemblyVersion: 0.1.0.0`.
+  - `Plugin.cs`, `Configuration.cs` (one toggle: `ShowOverlay`).
+  - `Solver/BingoBoard.cs` — pure 4x4 + 10 lines bitmask model.
+  - `Solver/LineProbability.cs` — exact enumeration of every k-subset (≤ C(16,9) = 11,440 boards). Current + shuffle-baseline probabilities for P(≥1), P(≥2), P(≥3) lines. No Monte Carlo — exact enumeration is faster and deterministic.
+  - `Services/BingoStateReader.cs` — wraps `PlayerState.IsWeeklyBingoStickerPlaced(int)` and `HasWeeklyBingoJournal` to produce a 16-bit mask or null.
+  - `UI/AddonWeeklyBingoOverlay.cs` — `AddonController<AddonWeeklyBingo>` from KamiToolKit; attaches a `TextNode` to the addon on PostSetup, refreshes on PostRefresh + PostUpdate, detaches on PreFinalize.
+  - `LICENSE` (MIT), per-plugin `README.md`.
+  - `.github/workflows/build-wondroustailssolver.yml` — clone of `build-bulkdesynth.yml` with path filter on this plugin's subtree. Also lists `KamiToolKit.dll` in the zip step since it isn't bundled by Dalamud.
+  - `docs/ff14/wondroustailssolver/pluginmaster.json` — placeholder `[]` so CI's first-build change-detection sees a tracked file.
+- Edited:
+  - `Gaming Tools/CLAUDE.md` — snapshot lists both plugins; new Subscribe URL; new "KamiToolKit" gotcha section under Plugin invocation patterns; updated local build snippet.
+  - `Gaming Tools/README.md` — second row in Plugins table; updated layout diagram; per-plugin docs link.
+  - `~/Claude Projects/docs/PROJECT_INDEX.md` — `gaming-tools` one-liner now mentions both plugins.
+  - `~/Claude Projects/docs/ADR_INDEX.md` — entry for new workspace-level ADR.
+  - New `~/Claude Projects/docs/adr/0001-dalamud-plugin-distribution.md` — workspace-level ADR documenting the `gaming-tools` monorepo + GitHub Pages + per-plugin subpath pattern. First Dalamud-specific ADR in the portfolio.
+
+### Decisions
+
+- **Clean-room over fork**: the upstream `MidoriKami/EzWondrousTails` has no `LICENSE` file. Reimplementing from public game-data documentation under MIT removes licence ambiguity and gives us a SPDX header for the Dalamud d17 registry if we ever publish there.
+- **Exact enumeration over Monte Carlo**: the upstream plugin used 500-iteration Monte Carlo for the shuffle baseline. Exact enumeration of C(16, 9) = 11,440 boards runs in microseconds and is deterministic. Dropped the `MonteCarloIterations` config field that the plan originally proposed — YAGNI.
+- **KamiToolKit via NuGet, not submodule**: archived upstream broke partly because its `..\KamiToolKit\KamiToolKit.csproj` relative project reference died when the submodule was removed. Pinning to NuGet 1.1.0 sidesteps that footgun.
+- **Single overall TextColor instead of per-substring colouring**: original plugin coloured each probability cell independently (bright/green/yellow/red/dark-red). v0.1 picks one colour for the whole overlay based on the most generous threshold's ratio-to-shuffle-baseline. Simpler ReadOnlySeString construction; can be upgraded to per-substring colour payloads in v0.2 if it's missed.
+- **Hide via `IsVisible`, don't detach** when the user toggles the overlay off. Detaching mid-addon-lifetime would defeat the AddonController's setup/finalize symmetry and risk leaking the node.
+
+### Tried and abandoned
+
+- **Reusing the existing EzWondrousTails source under fair use / no-licence-implied-permission** — rejected because it's both legally murky and unnecessary (codebase is small).
+- **Per-probability colour payloads in v0.1** — postponed. Lumina's `SeStringBuilder` + Dalamud's `Edge` text flag give a perfectly readable headline; per-substring colour adds SeString payload plumbing we don't need for parity.
+
+### Gotchas (now in `Gaming Tools/CLAUDE.md`)
+
+- KamiToolKit bootstrap is one call: `KamiToolKitLibrary.Initialize(PluginInterface)`. Internal `Services` class auto-injects.
+- `AddonController<T>` properties (`AddonName`, `OnSetup`, ...) are **init-only**. Use an object initialiser, not assignments.
+- `AddonController<T>.Enable()` asserts main thread. Wrap in `Framework.RunOnFrameworkThread(...)` if you construct from anywhere other than the plugin constructor.
+- `KamiToolKit.dll` must be **bundled in the shipped plugin zip** — Dalamud doesn't resolve it for you.
+- `TextNode.String` is `Lumina.Text.ReadOnly.ReadOnlySeString`. Use `new SeStringBuilder().Append(...).ToReadOnlySeString()`. Plain `string` does **not** implicitly convert.
+- Per-cell visibility: `NodeBase.IsVisible` (and `Position`, `Size`) live on the base class, not on `TextNode` directly. Documented inheritance trips you up otherwise.
+
+### Open threads
+
+- **In-game verification pending**: the `WeeklyBingo` addon's node tree may need a more specific parent than the root for the overlay to sit neatly below the bingo grid. Current code attaches `AsLastChild` of the root addon at `Position = (20, 12)`. If the overlay collides with existing in-game elements, we'll need to walk to a more stable inner node by `NodeType` rather than hard-coded `NodeID`.
+- **No `/wts settings` UI**: only the `/wts` on/off toggle exists. If we want to tweak Monte Carlo iteration count, font size, colour thresholds, etc., we'll need an ImGui settings window. None of that is needed for v0.1 parity.
+- **Local Mac build verification**: `dotnet 10.0.203` SDK is present at `~/.dotnet/dotnet`. Build runs after committing — CI is the source of truth either way.
+
+---
+
 ## 2026-05-20 — BulkDesynth iteration: v0.3.0 → v0.5.0 (UI polish, live preview, visible bag positions)
 
 **Agent**: claude-opus-4-7
