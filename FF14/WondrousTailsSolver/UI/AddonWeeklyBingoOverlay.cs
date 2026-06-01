@@ -112,9 +112,9 @@ internal sealed class AddonWeeklyBingoOverlay : Window, IDisposable
             ImGui.TableSetupColumn("Best",       ImGuiTableColumnFlags.WidthStretch, 1.0f);
             ImGui.TableHeadersRow();
 
-            DrawRow("P(\u22651 line)",  r.CurrentOneLine,    r.BestOneLine,    r.ShuffleApplicable, r.ShuffleOneLine,    inv);
-            DrawRow("P(\u22652 lines)", r.CurrentTwoLines,   r.BestTwoLines,   r.ShuffleApplicable, r.ShuffleTwoLines,   inv);
-            DrawRow("P(\u22653 lines)", r.CurrentThreeLines, r.BestThreeLines, r.ShuffleApplicable, r.ShuffleThreeLines, inv);
+            DrawRow("P(\u22651 line)",  r.CurrentOneLine,    LineProbability.OptimalSevenStampOneLine,    inv);
+            DrawRow("P(\u22652 lines)", r.CurrentTwoLines,   LineProbability.OptimalSevenStampTwoLines,   inv);
+            DrawRow("P(\u22653 lines)", r.CurrentThreeLines, LineProbability.OptimalSevenStampThreeLines, inv);
 
             ImGui.EndTable();
         }
@@ -134,33 +134,37 @@ internal sealed class AddonWeeklyBingoOverlay : Window, IDisposable
 
         ImGui.TextDisabled($"{stamps} of {BingoBoard.MaxStamps} stamps placed");
         ImGui.TextDisabled($"Max achievable: {r.MaxLineCount} line(s)");
+        ImGui.TextDisabled($"Best = optimal {LineProbability.OptimalReshuffleStamps}-stamp target");
     }
 
-    private static void DrawRow(string label, double current, double best,
-        bool shuffleApplicable, double shuffle, CultureInfo inv)
+    private static void DrawRow(string label, double current, double best, CultureInfo inv)
     {
         ImGui.TableNextRow();
         ImGui.TableNextColumn();
         ImGui.TextUnformatted(label);
 
         ImGui.TableNextColumn();
-        ImGui.TextColored(PickCurrentColor(current, shuffleApplicable, shuffle), Format(current, inv));
+        ImGui.TextColored(PickCurrentColor(current, best), Format(current, inv));
 
         ImGui.TableNextColumn();
-        var bestColor = best >= 0.5 ? ColorGreen : ColorDarkRed;
-        ImGui.TextColored(bestColor, "(" + Format(best, inv) + ")");
+        ImGui.TextDisabled(Format(best, inv));
     }
 
     private static string Format(double p, CultureInfo inv) => p.ToString("P1", inv);
 
-    private static Vector4 PickCurrentColor(double current, bool shuffleApplicable, double shuffle)
+    /// <summary>
+    /// Colour the Current value by how close it sits to the optimal
+    /// <see cref="LineProbability.OptimalReshuffleStamps"/>-stamp target:
+    /// matching or exceeding is green, near is yellow, far below is red,
+    /// zero is dark red. A target of 0 (impossible threshold) collapses
+    /// to neutral white — no comparison is meaningful.
+    /// </summary>
+    private static Vector4 PickCurrentColor(double current, double best)
     {
+        if (best <= 1e-9) return ColorWhite;
         if (current >= 0.999) return ColorBright;
-        if (!shuffleApplicable || shuffle <= 0.0) return ColorWhite;
-
-        var ratio = current / shuffle;
-        if (ratio >= 1.05) return ColorGreen;
-        if (ratio >= 0.95) return ColorYellow;
+        if (current >= best - 1e-6) return ColorGreen;
+        if (current >= best * 0.8) return ColorYellow;
         if (current > 0.001) return ColorRed;
         return ColorDarkRed;
     }

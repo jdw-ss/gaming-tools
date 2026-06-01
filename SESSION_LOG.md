@@ -10,6 +10,46 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-01 — WondrousTailsOdds: Best column = optimal 7-stamp targets (v0.1.3)
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending — follow-on to e097af9 (v0.1.2)
+
+### Changed
+
+- **User feedback after v0.1.2 in-game test**: the binary `(100%) / (0%)` Best column was correct but coarse. The actionable mental model is "what's the highest P(≥N) any 7-stamp board could give me?", because stamp 7 is the last point at which Second Chance reshuffles still help — past 7, the remaining 2 stamps land uniformly at random and the player has no steering left. The aspirational target is therefore the **max over all 7-stamp configurations of P(≥N lines | board + 2 random stamps)**, computed once and shown as a fixed target.
+- **Solver: new static-readonly constants**
+  `LineProbability.OptimalSevenStampOneLine / TwoLines / ThreeLines`, computed in a `static` constructor that enumerates every 16-bit value with popcount 7 (C(16, 7) = 11,440 boards) and runs the 2-stamp continuation enumeration for each. Tracks the max of `AtLeast(1)`, `AtLeast(2)`, `AtLeast(3)` across all boards. Single pass. Takes ~50 ms on a Mac at first access; happens once at plugin load.
+- **Solver math (now verified end-to-end via scratch test)**: Best P(≥1) = 100%, Best P(≥2) = 100%, Best P(≥3) = exactly 1/12 ≈ 8.3333%. The 1/12 falls out of the **row + diagonal** pattern (e.g. row 0 ∪ main diag = {0, 1, 2, 3, 5, 10, 15}), which puts 2 lines on the board and leaves three distinct 2-cell pairs ({9,13}, {6,14}, {7,11}) that each complete a third line — 3 disjoint events over C(9, 2) = 36 total 2-stamp draws.
+- **Result struct trimmed**: dropped `BestOneLine` / `BestTwoLines` / `BestThreeLines` (the binary reachability indicators from v0.1.2). The information they carried collapses cleanly into `MaxLineCount`, which is still surfaced in the overlay footer as "Max achievable: N line(s)".
+- **Overlay column semantics**:
+  - **Best** column now reads the static targets directly (`LineProbability.OptimalSevenStampOneLine` etc), not per-board values. Rendered in dimmed text since the targets are fixed.
+  - Removed the `(100%)` parentheses styling — column separation makes them redundant and the targets aren't binary any more.
+  - **Current** colour now compares to Best instead of to the shuffle baseline. Matching-or-exceeding = green, within ~80% = yellow, below = red, zero = dark red. A target of 0 collapses to neutral white.
+  - Footer gained a third explainer line: `Best = optimal 7-stamp target`.
+
+### Decisions
+
+- **Static constructor over hardcoded constants.** The three values *could* be baked in as numeric literals — but doing the computation explicitly in code keeps the derivation reviewable and immune to silent drift if `BingoBoard.MaxStamps` or the line set ever changed. 50 ms at startup is a fine price for that clarity.
+- **Best column dimmed, Current coloured.** Best is a static reference; Current is where you are. The colour budget is best spent on the dynamic column. Avoids the "two equally-shouting columns" visual problem.
+- **Current ratio vs Best, not vs ShuffleBaseline.** v0.1.2 coloured Current by ratio to ShuffleBaseline ("am I above the long-run average?"). User's mental model in v0.1.3 is "am I on track to hit the optimal 7-stamp number?" — same comparator should drive the colour. ShuffleBaseline is still shown below the table for the supplementary "luck" question.
+- **`MaxLineCount` stays in the footer.** It answers a different question ("is N still mathematically reachable from here?") and complements the Best target nicely. Best tells you what an optimal player would have; Max tells you what you yourself can still get.
+
+### Tried and abandoned
+
+- **Keeping the binary Best alongside the new target Best.** Considered surfacing both ("(reachable) (target)") but it'd double the cognitive load of the column for marginal value. `MaxLineCount` in the footer covers reachability already.
+
+### Gotchas (added to `Gaming Tools/CLAUDE.md`)
+
+- Static-readonly precomputed targets initialised in a `static` constructor are lazy — first access pays the cost. ~50 ms here, fine; if it ever bites a hot path, move the precomputation into `Plugin()` so it happens before `WindowSystem.Draw` ticks.
+
+### Open threads
+
+- **In-game eyeball check on v0.1.3 pending.** Logic-side everything's verified, but the Current-vs-Best colour banding wants seeing on a few real boards to confirm the green/yellow/red breakpoints match intuition.
+- Possibility for v0.1.4: surface the canonical "row + diagonal" shape diagram in the overlay so the player can *see* what they're aiming for, not just the number. Trade-off is overlay real-estate.
+
+---
+
 ## 2026-06-01 — WondrousTailsOdds: floating window overlay + best-achievable column (v0.1.2)
 
 **Agent**: claude-opus-4-7

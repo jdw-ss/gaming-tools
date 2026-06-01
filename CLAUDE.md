@@ -93,6 +93,7 @@ The notes here document what we learned while integrating KamiToolKit. **Wondrou
 - **`ImGuiCond.Always`** on `SetNextWindowSize` is what overrides ImGui's "remember last user resize" behaviour. Without it the first resize sticks.
 - **The Dalamud `WindowSystem` runs on the framework thread**, so dereferencing `AtkUnitBase*` inside `Draw()` / `DrawConditions()` / `PreDraw()` is safe without `Framework.RunOnFrameworkThread` gymnastics.
 - **`Window.RespectCloseHotkey = false` and `ShowCloseButton = false`** is the right config for a passive overlay (no Escape-to-close, no X button). Toggle visibility from a config flag the user's slash command flips.
+- **Static-readonly precomputed targets** (`LineProbability.OptimalSevenStamp*`, v0.1.3) are initialised in a `static` constructor that enumerates ~11,440 boards × 36 continuations. Cost is ~50 ms at first access; happens once at plugin load. Acceptable, but be aware: type initialisation is lazy, so if you reference any LineProbability member during a hot path you'll pay that one-off cost there instead of at startup. If it ever matters, move the precomputation into `Plugin()` so it runs before `WindowSystem.Draw` ticks.
 
 ### Plugin naming and InternalName collisions
 

@@ -14,9 +14,16 @@ shows:
     completed row / column / diagonal, given the stamps already placed
     and assuming the remaining stamps land on random unstamped cells.
   - **P(≥2 lines)** and **P(≥3 lines)** likewise.
-  - The **Best** column shows the upper bound: `(100%)` if that
-    threshold is still achievable under perfect remaining-stamp
-    placement, `(0%)` if it's already mathematically out of reach.
+  - The **Best** column is your aspirational target: the highest
+    P(≥N) achievable by *any* 7-stamp configuration if the final two
+    stamps land uniformly at random. By the time you reach 7 stamps —
+    the last point at which Second Chance reshuffles are still useful —
+    your Current row should match Best if you've reshuffled optimally.
+    Best is a fixed constant per threshold (currently 100% / 100% /
+    8.33%; the 8.33% comes out to exactly 1/12 from the row+diagonal
+    pattern that simultaneously maximises all three thresholds).
+  - Current is colour-coded by how close it is to Best: green when
+    matching or exceeding, yellow when within ~80%, red when far below.
 - **Shuffle baseline** — the corresponding probabilities you'd see on
   a fresh board with 9 random stamps. Only shown while a shuffle is
   still cheap (≤ 7 placed). Use this to answer "is my current board

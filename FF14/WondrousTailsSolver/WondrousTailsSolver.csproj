@@ -47,7 +47,7 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <AssemblyName>WondrousTailsOdds</AssemblyName>
     <RootNamespace>WondrousTailsSolver</RootNamespace>
-    <Version>0.1.2</Version>
+    <Version>0.1.3</Version>
     <!-- Required to dereference PlayerState / AddonWeeklyBingo pointers from
          FFXIVClientStructs. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

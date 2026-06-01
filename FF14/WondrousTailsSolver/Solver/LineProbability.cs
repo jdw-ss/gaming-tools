@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace WondrousTailsSolver.Solver;
 
@@ -32,6 +33,40 @@ internal static class LineProbability
     public const int ShuffleVisibleStampThreshold = 7;
 
     /// <summary>
+    /// The stamp count at which the player's reshuffle agency runs out:
+    /// past this point the remaining stamps land uniformly at random on
+    /// unstamped cells and the player can no longer steer. The "Best"
+    /// column targets are computed at this stamp count for that reason —
+    /// they're the highest P(≥N) achievable by any 7-stamp configuration
+    /// after the final 2 stamps are drawn uniformly at random. By stamp
+    /// 7 your Current row should match these under optimal reshuffle play.
+    /// </summary>
+    public const int OptimalReshuffleStamps = 7;
+
+    /// <summary>
+    /// Max P(≥1 line) achievable from any 7-stamp configuration after
+    /// the remaining 2 stamps draw uniformly at random. Computed once
+    /// at type initialisation (~11,440 enumerated 7-stamp boards).
+    /// </summary>
+    public static readonly double OptimalSevenStampOneLine;
+
+    /// <summary>Max P(≥2 lines) at the 7-stamp boundary.</summary>
+    public static readonly double OptimalSevenStampTwoLines;
+
+    /// <summary>
+    /// Max P(≥3 lines) at the 7-stamp boundary. Equals 3 / C(9, 2) = 1/12
+    /// ≈ 8.33% — three distinct 2-cell pairs each complete a third line
+    /// in the optimal row+diagonal pattern (e.g. row 0 ∪ main diag).
+    /// </summary>
+    public static readonly double OptimalSevenStampThreeLines;
+
+    static LineProbability()
+    {
+        (OptimalSevenStampOneLine, OptimalSevenStampTwoLines, OptimalSevenStampThreeLines)
+            = ComputeOptimalSevenStampTargets();
+    }
+
+    /// <summary>
     /// Result of a probability calculation. Probabilities are in [0, 1].
     /// </summary>
     public readonly struct Result
@@ -55,18 +90,10 @@ internal static class LineProbability
         /// <summary>
         /// Maximum number of completed lines achievable from this board if
         /// the player gets to place every remaining stamp optimally — i.e.
-        /// the upper bound across every possible draw outcome. Derived from
-        /// the same enumeration as the "Current" probabilities; the
-        /// "Best" properties below collapse this to per-threshold 0/1.
+        /// the upper bound across every possible draw outcome. Surfaced
+        /// in the overlay footer as "Max achievable: N line(s)".
         /// </summary>
         public int MaxLineCount { get; init; }
-
-        /// <summary>P(≥1 line) under perfect remaining-stamp placement: 1 if achievable, 0 otherwise.</summary>
-        public double BestOneLine => MaxLineCount >= 1 ? 1.0 : 0.0;
-        /// <summary>P(≥2 lines) under perfect remaining-stamp placement: 1 if achievable, 0 otherwise.</summary>
-        public double BestTwoLines => MaxLineCount >= 2 ? 1.0 : 0.0;
-        /// <summary>P(≥3 lines) under perfect remaining-stamp placement: 1 if achievable, 0 otherwise.</summary>
-        public double BestThreeLines => MaxLineCount >= 3 ? 1.0 : 0.0;
     }
 
     /// <summary>
@@ -99,6 +126,31 @@ internal static class LineProbability
             ShuffleThreeLines = shuffle.AtLeast(3),
             MaxLineCount = current.MaxObservedLines,
         };
+    }
+
+    /// <summary>
+    /// One-pass scan over every 16-bit board with exactly
+    /// <see cref="OptimalReshuffleStamps"/> stamps placed. For each, run
+    /// the 2-stamp continuation enumeration and track the max
+    /// P(≥1) / P(≥2) / P(≥3). These are the "Best" column targets.
+    /// </summary>
+    private static (double p1, double p2, double p3) ComputeOptimalSevenStampTargets()
+    {
+        double maxP1 = 0.0, maxP2 = 0.0, maxP3 = 0.0;
+        var addStamps = BingoBoard.MaxStamps - OptimalReshuffleStamps;
+        var maskBound = 1 << BingoBoard.Cells;
+        for (var mask = 0; mask < maskBound; mask++)
+        {
+            if (BitOperations.PopCount((uint)mask) != OptimalReshuffleStamps) continue;
+            var dist = EnumerateLineDistribution((ushort)mask, addStamps);
+            var p1 = dist.AtLeast(1);
+            var p2 = dist.AtLeast(2);
+            var p3 = dist.AtLeast(3);
+            if (p1 > maxP1) maxP1 = p1;
+            if (p2 > maxP2) maxP2 = p2;
+            if (p3 > maxP3) maxP3 = p3;
+        }
+        return (maxP1, maxP2, maxP3);
     }
 
     /// <summary>
