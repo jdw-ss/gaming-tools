@@ -1,20 +1,20 @@
 [
   {
     "Author": "John Wilson (jdw-ss)",
-    "Name": "Wondrous Tails Solver",
-    "InternalName": "WondrousTailsSolver",
-    "AssemblyVersion": "0.1.0.0",
-    "Description": "Overlays row, column, and diagonal completion probabilities on FFXIV's weekly Wondrous Tails journal. Shows P(≥1 line), P(≥2 lines), P(≥3 lines) given the stamps already placed, and — while you still have a Second Chance shuffle available — the shuffle-average baseline so you can tell whether your current board is above or below average.\n\nClean-room reimplementation of the archived MidoriKami/EzWondrousTails. MIT licensed.\n\nUsage:\n  /wts         - toggle the in-journal overlay on/off\n",
+    "Name": "Wondrous Tails Odds",
+    "InternalName": "WondrousTailsOdds",
+    "AssemblyVersion": "0.1.1.0",
+    "Description": "Overlays row, column, and diagonal completion probabilities on FFXIV's weekly Wondrous Tails journal. Shows P(≥1 line), P(≥2 lines), P(≥3 lines) given the stamps already placed, and — while you still have a Second Chance shuffle available — the shuffle-average baseline so you can tell whether your current board is above or below average.\n\nPersonal alternative to the actively-maintained d17 \"Wondrous Tails Solver\" (MidoriKami / daemitus). Independent clean-room implementation, MIT licensed.\n\nUsage:\n  /wts         - toggle the in-journal overlay on/off\n",
     "ApplicableVersion": "any",
     "Tags": [
       "wondrous tails",
       "weekly",
       "bingo",
       "khloe",
-      "utility",
+      "odds",
       "overlay"
     ],
-    "Punchline": "See your Wondrous Tails completion odds at a glance.",
+    "Punchline": "Personal alternative Wondrous Tails probability overlay.",
     "RepoUrl": "https://github.com/jdw-ss/gaming-tools",
     "DalamudApiLevel": 15,
     "AcceptsFeedback": true,
@@ -22,7 +22,7 @@
     "DownloadLinkUpdate": "https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/latest.zip",
     "DownloadLinkTesting": "https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/latest.zip",
     "DownloadCount": 0,
-    "LastUpdate": 1780342275,
+    "LastUpdate": 1780343639,
     "IsHide": false,
     "IsTestingExclusive": false
   }
