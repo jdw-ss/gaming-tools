@@ -10,7 +10,7 @@ GitHub Pages so they can be subscribed to from inside the game client.
 | Plugin | Path | Subscribe URL |
 | --- | --- | --- |
 | [Bulk Desynth](./FF14/BulkDesynth) | `FF14/BulkDesynth` | `https://jdw-ss.github.io/gaming-tools/ff14/bulkdesynth/pluginmaster.json` |
-| [Wondrous Tails Solver](./FF14/WondrousTailsSolver) | `FF14/WondrousTailsSolver` | `https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/pluginmaster.json` |
+| [Wondrous Tails Odds](./FF14/WondrousTailsSolver) | `FF14/WondrousTailsSolver` | `https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/pluginmaster.json` |
 
 (The subscribe URL works once the GitHub Pages site has been enabled on
 this repository and the build workflow has run at least once — see
