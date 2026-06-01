@@ -20,7 +20,7 @@ namespace WondrousTailsSolver;
 /// </summary>
 public sealed class Plugin : IDalamudPlugin
 {
-    public string Name => "Wondrous Tails Solver";
+    public string Name => "Wondrous Tails Odds";
 
     [PluginService] public static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] public static IPluginLog Log { get; private set; } = null!;

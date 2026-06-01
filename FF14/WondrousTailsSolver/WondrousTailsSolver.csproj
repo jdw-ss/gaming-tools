@@ -1,11 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    WondrousTailsSolver - clean-room Dalamud plugin that overlays
+    WondrousTailsOdds - personal Dalamud plugin that overlays
     row/column/diagonal completion probabilities onto FFXIV's weekly
-    Wondrous Tails journal. Originally inspired by the archived
-    MidoriKami/EzWondrousTails plugin; this is an independent
-    reimplementation under MIT, written against current Dalamud API.
+    Wondrous Tails journal. Independent clean-room implementation,
+    MIT licensed, written against current Dalamud API.
+
+    Source folder is still named WondrousTailsSolver/ for historical
+    continuity (the project started under that name before we discovered
+    a maintained d17 plugin already owned the WondrousTailsSolver
+    InternalName). The shipping artefact is WondrousTailsOdds.dll +
+    WondrousTailsOdds.json; AssemblyName and the manifest filename
+    were renamed in v0.1.1 to avoid the d17 collision. RootNamespace
+    stays WondrousTailsSolver because nothing user-facing depends on
+    it and a global namespace rename has no value.
 
     Build:
       dotnet build -c Release
@@ -34,9 +42,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <AssemblyName>WondrousTailsSolver</AssemblyName>
+    <AssemblyName>WondrousTailsOdds</AssemblyName>
     <RootNamespace>WondrousTailsSolver</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <!-- Required to dereference PlayerState / AddonWeeklyBingo pointers from
          FFXIVClientStructs. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -89,7 +97,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="WondrousTailsSolver.json">
+    <None Update="WondrousTailsOdds.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

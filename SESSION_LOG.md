@@ -10,6 +10,50 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-01 — WondrousTailsSolver -> WondrousTailsOdds rename (v0.1.1)
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending (this session) — follow-on to 4be2cfa (v0.1.0)
+
+### Changed
+
+- **In-game install failed.** User subscribed to the v0.1.0 repo and could only see the d17-stable Wondrous Tails Solver, not ours. User correctly diagnosed it as a name/tag collision.
+- **Root cause investigation revealed v0.1.0's whole premise was partly wrong.** `MidoriKami/EzWondrousTails` is archived, but the plugin itself was never housed there — it lives at `MidoriKami/WondrousTailsSolver` and is **actively maintained in the official d17 stable channel** under InternalName `WondrousTailsSolver`, owners daemitus / MidoriKami / nathanctech, version 3.2.2.6 as of this session. Confirmed by fetching `https://raw.githubusercontent.com/goatcorp/DalamudPluginsD17/main/stable/WondrousTailsSolver/manifest.toml`. Dalamud always prefers d17 over custom repos for the same InternalName, so our v0.1.0 was invisible.
+- **User chose to keep ours as a personal alternative** rather than revert. Renamed to avoid the collision:
+  - `WondrousTailsSolver.json` → `WondrousTailsOdds.json` (git mv, history preserved).
+  - Manifest `Name`: "Wondrous Tails Solver" → "Wondrous Tails Odds". `InternalName`: "WondrousTailsSolver" → "WondrousTailsOdds". `AssemblyVersion`: 0.1.0.0 → 0.1.1.0. `Description` and `Punchline` updated to mention this is a personal alternative to the d17 plugin. `Tags` lost "utility", gained "odds" for distinctiveness in installer search.
+  - `WondrousTailsSolver.csproj` `<AssemblyName>` → `WondrousTailsOdds`, `<Version>` → 0.1.1, `<None Update="*">` path updated. `<RootNamespace>` kept as `WondrousTailsSolver` (purely internal, no value in renaming).
+  - `Plugin.cs:23` `Name` property → "Wondrous Tails Odds".
+  - `.github/workflows/build-wondroustailssolver.yml`: workflow display name, `MANIFEST_PATH`, `MANIFEST=`, zip step file list, commit message all switched to WondrousTailsOdds. Path filter and GH Pages subpath kept as `wondroustailssolver` so existing subscribers don't see a broken URL.
+  - `FF14/WondrousTailsSolver/README.md` rewritten with the new name, a section explaining the relationship to the d17 plugin, and a note about the deliberate naming disconnect between repo paths and shipping artefacts.
+- `Gaming Tools/CLAUDE.md` gained a new "Plugin naming and InternalName collisions" gotcha section under the KamiToolKit one, with the d17 check command for future plugins.
+- Workspace ADR-0001 (`docs/adr/0001-dalamud-plugin-distribution-pattern.md`) gained an addendum recording the lesson.
+
+### Decisions
+
+- **Keep RootNamespace and source-folder name unchanged.** Renaming `RootNamespace WondrousTailsSolver` would require a sweep across every `.cs` file with no user-facing benefit; the namespace is purely internal. Same for the csproj filename, the source folder, and the GH Pages subpath — all of those are dev / URL artefacts that nobody but the maintainer reads.
+- **Keep subscribe URL path as `ff14/wondroustailssolver/`** so the URL we already gave the user remains valid. The path is just a GH Pages folder; the InternalName mismatch is harmless.
+- **Picked `WondrousTailsOdds` over alternatives** (WondrousTailsHelper, WondrousTailsAssistant, WTSolverV2, KhloeAssistant). Short, accurate ("odds" is exactly what the plugin computes), no whitespace/casing surprises, clearly distinct from the d17 entry in search.
+- **Did not revert v0.1.0.** User explicitly chose to keep this as a personal alternative — useful as a sandbox for future iteration without coordinating with the upstream's release cadence.
+
+### Tried and abandoned
+
+- **Considered renaming the source folder + csproj filename + RootNamespace** for full consistency. Rejected: zero user-facing benefit, large diff, breaks `git log --follow` continuity for every source file. The naming disconnect is documented instead.
+
+### Gotchas (added to `Gaming Tools/CLAUDE.md`)
+
+- Check the d17 stable channel for InternalName collisions before shipping any plugin: `curl -fI https://raw.githubusercontent.com/goatcorp/DalamudPluginsD17/main/stable/<Name>/manifest.toml` — 200 means collision, 404 means clear.
+- An archived repo doesn't mean a dead plugin — the canonical home may be elsewhere.
+- AssemblyName + InternalName + manifest filename all rename together. RootNamespace, source folder, csproj filename, GH Pages subpath can stay.
+- `Plugin.Name` is user-facing and distinct from `InternalName`.
+
+### Open threads
+
+- **User needs to refresh the custom-repo row in Dalamud** to pick up the new pluginmaster.json (with the WondrousTailsOdds InternalName) after CI ships v0.1.1. The previous v0.1.0 entry will simply disappear since nothing was ever installed.
+- v0.1.0 in-game test never happened (the collision prevented install). v0.1.1 in-game test is the real first contact.
+
+---
+
 ## 2026-06-01 — Bootstrap WondrousTailsSolver plugin (v0.1.0)
 
 **Agent**: claude-opus-4-7

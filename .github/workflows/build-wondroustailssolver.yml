@@ -1,4 +1,4 @@
-# Builds the WondrousTailsSolver Dalamud plugin on ubuntu-latest whenever its
+# Builds the WondrousTailsOdds Dalamud plugin on ubuntu-latest whenever its
 # source changes, and commits the new zip + refreshed pluginmaster.json into
 # `docs/ff14/wondroustailssolver/` so GitHub Pages serves it to subscribers.
 #
@@ -6,10 +6,17 @@
 # Plugin Repositories):
 #   https://<owner>.github.io/<repo>/ff14/wondroustailssolver/pluginmaster.json
 #
+# The source folder, csproj name, GH Pages subpath, and workflow filename
+# all still say "WondrousTailsSolver" / "wondroustailssolver" for historical
+# continuity. The shipping InternalName + DLL + manifest filename are
+# "WondrousTailsOdds" (renamed in v0.1.1 to avoid a collision with the
+# d17-stable MidoriKami/WondrousTailsSolver plugin, which shares the
+# original InternalName).
+#
 # Mirrors `build-bulkdesynth.yml` exactly. Keep the two workflows in sync
 # when bumping shared steps (e.g. dotnet SDK version, dalamud-distrib URL).
 
-name: Build WondrousTailsSolver
+name: Build WondrousTailsOdds
 
 on:
   push:
@@ -39,12 +46,12 @@ jobs:
       - name: Read plugin AssemblyVersion
         id: version
         run: |
-          MANIFEST_PATH="FF14/WondrousTailsSolver/WondrousTailsSolver.json"
+          MANIFEST_PATH="FF14/WondrousTailsSolver/WondrousTailsOdds.json"
           VERSION=$(jq -r '.AssemblyVersion' "$MANIFEST_PATH")
           echo "assembly_version=$VERSION" >> $GITHUB_OUTPUT
           SEMVER=$(echo "$VERSION" | awk -F. '{ printf "%s.%s.%s", $1, $2, $3 }')
           echo "semver=$SEMVER" >> $GITHUB_OUTPUT
-          echo "WondrousTailsSolver version: $VERSION (semver: $SEMVER)"
+          echo "WondrousTailsOdds version: $VERSION (semver: $SEMVER)"
 
       - name: Download Dalamud reference assemblies
         run: |
@@ -82,10 +89,10 @@ jobs:
           # don't ship it; trying to ship a duplicate copy can cause
           # version conflicts with Dalamud's own.
           zip -q "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip" \
-            WondrousTailsSolver.dll \
-            WondrousTailsSolver.json \
-            WondrousTailsSolver.deps.json \
-            WondrousTailsSolver.pdb \
+            WondrousTailsOdds.dll \
+            WondrousTailsOdds.json \
+            WondrousTailsOdds.deps.json \
+            WondrousTailsOdds.pdb \
             KamiToolKit.dll \
             SixLabors.ImageSharp.dll
           echo "Built zip contents:"
@@ -97,7 +104,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          MANIFEST=$(cat FF14/WondrousTailsSolver/WondrousTailsSolver.json)
+          MANIFEST=$(cat FF14/WondrousTailsSolver/WondrousTailsOdds.json)
           NOW=$(date +%s)
           # GitHub Pages project-page URL: https://<owner>.github.io/<repo>/
           # We append the plugin's path (ff14/wondroustailssolver/) so
@@ -132,6 +139,6 @@ jobs:
             echo "docs/ff14/wondroustailssolver/ unchanged - skipping commit."
             exit 0
           fi
-          git commit -m "ci: rebuild WondrousTailsSolver v${{ steps.version.outputs.semver }}" \
+          git commit -m "ci: rebuild WondrousTailsOdds v${{ steps.version.outputs.semver }}" \
             -m "Auto-built on ubuntu-latest by .github/workflows/build-wondroustailssolver.yml. GitHub Pages will pick up the new zip on its next deploy cycle (usually under a minute)."
           git push

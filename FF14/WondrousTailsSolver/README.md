@@ -1,7 +1,8 @@
-# Wondrous Tails Solver
+# Wondrous Tails Odds
 
-A Dalamud plugin that overlays bingo-line completion probabilities on
-Final Fantasy XIV's weekly **Wondrous Tails** journal (Khloe's mini-game).
+A personal Dalamud plugin that overlays bingo-line completion
+probabilities on Final Fantasy XIV's weekly **Wondrous Tails** journal
+(Khloe's mini-game).
 
 For each board, the overlay shows:
 
@@ -15,10 +16,19 @@ For each board, the overlay shows:
 - Colour bands relative to the shuffle baseline so a glance tells you
   whether to keep going or reshuffle.
 
-This is a **clean-room reimplementation** of the archived
-[`MidoriKami/EzWondrousTails`](https://github.com/MidoriKami/EzWondrousTails)
-plugin. No code was copied; the original is unlicensed and no longer
-loads against current Dalamud (API 15).
+## Relationship to the d17 "Wondrous Tails Solver" plugin
+
+The official Dalamud store ships a plugin called **Wondrous Tails
+Solver** at `MidoriKami/WondrousTailsSolver`, currently maintained by
+daemitus / MidoriKami / nathanctech, on the same API level. That
+plugin and this one solve the same problem. This repository is a
+personal alternative — independent, clean-room, MIT licensed — kept
+around so the author can experiment with features and UI without
+touching the upstream's release cadence.
+
+The two plugins ship under different `InternalName`s
+(`WondrousTailsSolver` vs `WondrousTailsOdds`), so installing both
+side-by-side is fine; Dalamud lists them as separate entries.
 
 ## Install
 
@@ -29,7 +39,14 @@ Repositories**, add:
 https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/pluginmaster.json
 ```
 
-Then enable **Wondrous Tails Solver** in the plugin list.
+(The URL path is `wondroustailssolver` for historical reasons — the
+plugin was originally drafted under that name before the InternalName
+collision with d17 was caught. The shipping plugin is "Wondrous Tails
+Odds".)
+
+After saving, click the refresh icon on the custom-repo row, open the
+plugin installer, and search for **Wondrous Tails Odds** (or filter by
+author "John Wilson (jdw-ss)").
 
 ## Commands
 
@@ -51,6 +68,10 @@ unzip -q /tmp/dalamud.zip -d .refs
 
 dotnet build WondrousTailsSolver.csproj -c Release
 ```
+
+The build output DLL is `WondrousTailsOdds.dll` even though the csproj
+file is still `WondrousTailsSolver.csproj` — the disconnect is
+deliberate (see `CLAUDE.md` "Plugin naming" gotcha for the rationale).
 
 ## Licence
 
