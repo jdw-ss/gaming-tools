@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Publishing-infrastructure monorepo for FFXIV Dalamud plugins. Each plugin lives in its own subfolder; CI builds the plugin and publishes the `.zip` + `pluginmaster.json` to GitHub Pages under a dedicated subpath so users can subscribe per-plugin. Currently active plugins: **BulkDesynth**, **WondrousTailsSolver**. Status: **live**.
+Publishing-infrastructure monorepo for FFXIV Dalamud plugins. Each plugin lives in its own subfolder; CI builds the plugin and publishes the `.zip` + `pluginmaster.json` to GitHub Pages under a dedicated subpath so users can subscribe per-plugin. Currently active plugins: **BulkDesynth**, **WondrousTailsOdds** (source folder `WondrousTailsSolver/`), **GcSupplyHelper**. Status: **live**.
 
 ## Stack
 
@@ -18,6 +18,7 @@ Plugin builds run on CI, not locally. Local C# builds require:
 ```bash
 dotnet build FF14/BulkDesynth/BulkDesynth.csproj -c Release
 dotnet build FF14/WondrousTailsSolver/WondrousTailsSolver.csproj -c Release
+dotnet build FF14/GcSupplyHelper/GcSupplyHelper.csproj -c Release
 ```
 
 There is no local UI to preview.
@@ -39,7 +40,8 @@ None (build-time only).
 
 - **Push to `main`** → CI builds → commits `latest.zip` + `pluginmaster.json` under `docs/<plugin-subpath>/` → GitHub Pages publishes.
 - **Subscribe URL for BulkDesynth**: `https://jdw-ss.github.io/gaming-tools/ff14/bulkdesynth/pluginmaster.json`
-- **Subscribe URL for WondrousTailsSolver**: `https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/pluginmaster.json`
+- **Subscribe URL for WondrousTailsOdds**: `https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/pluginmaster.json`
+- **Subscribe URL for GcSupplyHelper**: `https://jdw-ss.github.io/gaming-tools/ff14/gcsupplyhelper/pluginmaster.json`
 
 ## Companion docs
 
@@ -101,3 +103,13 @@ The notes here document what we learned while integrating KamiToolKit. **Wondrou
 - **An archived repo doesn't mean a dead plugin.** `MidoriKami/EzWondrousTails` was archived but the plugin itself lives on at `MidoriKami/WondrousTailsSolver` under InternalName `WondrousTailsSolver` and is actively maintained in d17 stable. WondrousTailsOdds (this monorepo's second plugin) collided on the original name and had to be renamed in v0.1.1.
 - **Renaming after first ship is cheap but not free.** AssemblyName + InternalName + manifest filename must all change together. The csproj `<None Update="*.json">` block, the `MANIFEST_PATH` and `MANIFEST=` cat in the CI workflow, and the zip step's file list all need updating. RootNamespace, source folder, csproj filename, and GH Pages subpath can stay (and did, for WondrousTailsOdds — the disconnect is purely cosmetic and documented in the relevant READMEs).
 - **`Plugin.Name` is user-facing**, distinct from `InternalName`. Keep them consistent in spirit so users searching the installer find what they expect, but they don't have to be byte-identical.
+
+### Grand Company supply data surface (GcSupplyHelper v0.1)
+
+- **Authoritative read path**: `FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentGrandCompanySupply.Instance()->SupplyProvisioningData`. The pointer is null until the player has opened *something* — Personnel Officer Supply List, or the Timers panel — at least once in the session. Once non-null it stays valid until logout, even after the originating window is closed. Cache in-memory; refresh via multi-addon `PostSetup` hooks.
+- **Array layout**: `SupplyProvisioningData->SupplyData` (length 8) holds the eight crafter Supply Missions in ClassJob order CRP=8, BSM=9, ARM=10, GSM=11, LTW=12, WVR=13, ALC=14, CUL=15. `ProvisioningData` (length 3) holds the three gatherer Provisioning Missions in order MIN=16, BTN=17, FSH=18. Each `SupplyProvisioningItem` exposes `ItemId` (uint), `NumRequested` (byte), and `ItemName` (Utf8String, currently unused — we resolve names from the Lumina Item sheet for stability across future game-text changes).
+- **Multiple addon-name candidates for the Timers panel**: FFXIVClientStructs doesn't annotate the Timers addon. v0.1 registers `PostSetup` listeners against `GrandCompanySupplyList` (confirmed Personnel Officer), `ContentsInfo`, `ContentsInfoDetail`, and `ContentsTimerSetting`. Only the matching ones fire; the others are no-ops. First in-game test should add a temporary log of every `PostSetup` event to identify which Timers candidate is real, then prune the dead ones in v0.1.1.
+- **Class-job index mapping**: the array index → ClassJob id table is hand-coded in `Services/SupplyMissionReader.cs:21`. If a future patch reshuffles the array order (unlikely but possible), users will see e.g. "Carpenter mission asks for leather", which is the diagnostic signal to update the mapping table. Don't trust the array index alone — the same item shouldn't be in two different mission slots on the same day, but if it is, treat the first occurrence as canonical.
+- **Lumina `Recipe` lookup is keyed by `RecipeId`, not `ItemId`.** `recipeSheet.TryGetRow(itemId)` does NOT find the recipe for an item — Recipe is indexed by its own row id. Either use `RecipeLookup` (keyed by ItemId, returns class-keyed recipe references), or — what GcSupplyHelper does — eagerly walk the Recipe sheet once at plugin load and build a `Dictionary<itemResultId, RecipeData>`. ~2,700 rows; trivially cheap.
+- **Leaf classification**: `Item.GatheringItem.RowId != 0` is the canonical "this item is harvestable by BTN/MIN/FSH" check (see `Services/LuminaRecipeDataSource.BuildGatheredSet()`). Items with neither a recipe nor a `GatheringItem` reference fall back to `ItemSearchCategory.RowId != 0` as a weak "is a vendor item" signal — better than nothing for the source-label colour, but not authoritative.
+- **`UIState.GCSupply` at offset `0x10D28`** (size `0x2C28`) is the persistent backing buffer that survives between Personnel-Officer / Timers openings. Its internal layout is **not** documented in FFXIVClientStructs as of API 15. A v0.2 ambition is to reverse-engineer the 11 item-ID offsets and read directly from this struct so the plugin works *without* any in-game UI interaction. Filed in `IDEAS.md`.

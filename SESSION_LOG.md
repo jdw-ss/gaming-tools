@@ -10,6 +10,59 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-02 — Bootstrap GcSupplyHelper plugin (v0.1.0)
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending (this session)
+
+### Changed
+
+- Added a **third plugin** to the monorepo: `FF14/GcSupplyHelper/`. Reads today's 11 Grand Company Supply / Provisioning missions from `AgentGrandCompanySupply` and presents per-mission + aggregate raw-material shopping lists in a three-tab ImGui window.
+- New files:
+  - `FF14/GcSupplyHelper/GcSupplyHelper.csproj` — mirrors the WondrousTailsOdds v0.1.2+ csproj shape; no third-party PackageReferences.
+  - `FF14/GcSupplyHelper/GcSupplyHelper.json` — manifest, `DalamudApiLevel: 15`, `AssemblyVersion: 0.1.0.0`.
+  - `Plugin.cs`, `Configuration.cs` (HashSet of enabled ClassJob ids, AutoRefreshOnLogin flag).
+  - `Models/DailyMission.cs`, `Models/MaterialRequirement.cs`.
+  - `Services/IRecipeDataSource.cs` (abstraction), `Services/RecipeWalker.cs` (pure recursive solver with cycle guard and ceil-quantity math), `Services/LuminaRecipeDataSource.cs` (production impl), `Services/SupplyMissionReader.cs` (unsafe `AgentGrandCompanySupply` reader).
+  - `Windows/MainWindow.cs` — Per Mission / Aggregate / Settings tabs with item icons, source labels, and "Needed by" class chips.
+  - `LICENSE` (MIT), per-plugin `README.md`.
+  - `.github/workflows/build-gcsupplyhelper.yml` — clone of `build-wondroustailssolver.yml` with name and path-filter substitutions.
+  - `docs/ff14/gcsupplyhelper/pluginmaster.json` — placeholder `[]`.
+- Edited:
+  - `Gaming Tools/CLAUDE.md` — snapshot lists three plugins; new "Grand Company supply data surface" gotcha section.
+  - `Gaming Tools/README.md` — third row in Plugins table, updated layout diagram, per-plugin docs link.
+  - `Gaming Tools/IDEAS.md` — new backlog item: reverse-engineer `UIState.GCSupply` layout for zero-UI-trigger population.
+  - `~/Claude Projects/docs/PROJECT_INDEX.md` — `gaming-tools` one-liner now lists all three plugins.
+
+### Decisions
+
+- **Multi-addon refresh hooks instead of just Personnel Officer**: the user pointed out the in-game Timers panel also shows the day's missions. The data source agent populates the same way regardless of which UI triggers it, so the plugin registers `PostSetup` listeners against `GrandCompanySupplyList` (Personnel Officer, confirmed) plus `ContentsInfo` / `ContentsInfoDetail` / `ContentsTimerSetting` (Timers candidates). First in-game test will identify the real Timers addon name and prune the dead candidates.
+- **`UIState.GCSupply` reverse-engineering deferred to v0.2.** The 11,304-byte buffer at offset `0x10D28` almost certainly contains today's missions persistently from login onwards, but FFXIVClientStructs hasn't annotated its layout. Diffing the buffer at known trigger points to find the 11 item-ID offsets is real work; the multi-addon hook approach satisfies the user's "I shouldn't have to specifically visit the officer" intent without it.
+- **`IRecipeDataSource` abstraction over Lumina sheets.** Production implementation walks Lumina once at construction; test implementation injects hand-crafted recipes. Lets `RecipeWalker` be exercised off-tree with no Dalamud / Lumina dependency. 13 scratch assertions pass: ceil-quantity math, cycle termination + warning, direct gather leaf, cross-class aggregation with NeededByClassJobs accumulation.
+- **Class-job index → array slot mapping hardcoded.** `_supplyData[0..7]` = ClassJobs 8..15 (CRP..CUL), `_provisioningData[0..2]` = ClassJobs 16..18 (MIN..FSH). The mapping is hand-coded in `SupplyMissionReader.cs:21`; if SE reorders the arrays in a future patch the symptom is "Carpenter mission asks for leather" and the fix is a one-line edit. Documented as a gotcha.
+- **Recipe lookup builds a single eager `Dictionary<itemId, RecipeData>` at construction.** Avoids the `RecipeLookup`-vs-`Recipe.TryGetRow(itemId)` API ambiguity entirely (the Phase-1 research's `TryGetRow` example was wrong — Recipe is keyed by RecipeId, not ItemId). 2,700-row scan is trivially cheap; first-write-wins resolves the rare case of multiple recipes producing the same item.
+
+### Tried and abandoned
+
+- **`Action<string>` from `IPluginLog.Warning` method group** — failed compilation because `Warning` has many overloads. Wrapped in a `msg => Log.Warning(msg)` lambda. Tiny, but worth noting because it's the same shape as the first-build issues on the previous two plugins.
+- **Top-level statements before class declaration in the scratch test program** — C# requires the class declarations after top-level statements. One-shot fix.
+
+### Gotchas (added to `Gaming Tools/CLAUDE.md`)
+
+- `AgentGrandCompanySupply` agent pointer is null until Personnel Officer OR Timers panel is opened; `UIState.GCSupply` is the persistent backing buffer but its layout isn't documented yet.
+- `Recipe` is keyed by `RecipeId`, NOT `ItemId`. Use `RecipeLookup` or scan once into a map.
+- `Item.GatheringItem.RowId != 0` is the leaf "is this gathered" check.
+- Multi-addon `PostSetup` hooks against name candidates is the right pattern when FFXIVClientStructs doesn't annotate an addon's struct.
+
+### Open threads
+
+- **Timers addon name TBD** — in-game test should add a temporary log line in `Plugin.cs` to capture every `PostSetup` event, identify which candidate is the real Timers addon, and prune the dead ones in a v0.1.1 cleanup commit.
+- **Vendor classification is weak** — currently uses `Item.ItemSearchCategory.RowId != 0` as the "is a vendor item" signal, which catches most cases but misses GC-seal-shop-only items. v0.2 idea: build a vendor-availability map.
+- **v0.2 ambition**: reverse-engineer `UIState.GCSupply` (offset `0x10D28`, size `0x2C28`) so the plugin works without any in-game UI interaction.
+- **In-game smoke test pending** — same constraint as every plugin in this monorepo. Build verification done on Mac (zero warnings, zero errors, 13/13 scratch checks pass).
+
+---
+
 ## 2026-06-01 — WondrousTailsOdds: Best column = optimal 7-stamp targets (v0.1.3)
 
 **Agent**: claude-opus-4-7

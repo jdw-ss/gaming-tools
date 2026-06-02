@@ -14,8 +14,8 @@ This file is just "what might we do next, and when does it become urgent".
 ### Cross-plugin / CI
 
 - **Bump GitHub Actions to Node-24-compatible versions before 2026-06-16.**
-  Both `.github/workflows/build-bulkdesynth.yml` and
-  `.github/workflows/build-wondroustailssolver.yml` use
+  All three workflows (`build-bulkdesynth.yml`,
+  `build-wondroustailssolver.yml`, `build-gcsupplyhelper.yml`) use
   `actions/checkout@v4` and `actions/setup-dotnet@v4`, which CI is
   warning are Node-20-based. Forced to Node 24 by default on
   **2026-06-16**, Node 20 fully removed from the runner **2026-09-16**.
@@ -23,6 +23,36 @@ This file is just "what might we do next, and when does it become urgent".
   one `ci:` commit. If newer versions aren't yet out, opt in early
   with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` per the GitHub blog
   post.
+
+### GcSupplyHelper
+
+- **v0.1.1: identify the Timers panel's addon name and prune dead
+  candidates.** v0.1 registers `PostSetup` listeners against
+  `GrandCompanySupplyList` (confirmed Personnel Officer) plus three
+  Timers candidates (`ContentsInfo`, `ContentsInfoDetail`,
+  `ContentsTimerSetting`). First in-game smoke test adds a temporary
+  `Plugin.Log.Information("PostSetup: " + addonName)` line to capture
+  every addon event, identifies the real Timers addon, removes the
+  dead listeners + the log line in a one-shot v0.1.1 cleanup.
+- **v0.2: read `UIState.GCSupply` directly so the plugin works without
+  any UI interaction.** The buffer at offset `0x10D28` (size `0x2C28`)
+  is the persistent backing store; FFXIVClientStructs hasn't annotated
+  its layout. Approach: log the buffer pre-/post- known triggers
+  (login, Timers, Personnel Officer), diff for stable item-ID
+  offsets, document the layout in `Gaming Tools/CLAUDE.md`. Removes
+  the "open Timers or Officer once per session" prerequisite entirely.
+- **Better vendor classification.** Currently `MaterialSource.Vendor`
+  is a weak heuristic (`ItemSearchCategory.RowId != 0`). Most missing
+  cases are GC seal shop items. Build an explicit
+  `Dictionary<itemId, MaterialSource>` from the GC-shop Lumina sheets.
+- **Surface intermediate crafts in the Per Mission tab.** v0.1
+  flattens straight to leaves; the user mentioned wanting to gather
+  raw materials, but seeing "you need 3 Bronze Ingots" between the
+  turn-in and its leaf ingredients could help users who craft along
+  the way. Could be a per-tab toggle.
+- **Inventory comparison.** "You have 5 / need 14 Copper Ore" by
+  cross-referencing `InventoryManager` (the same surface BulkDesynth
+  uses). Likely the highest-value v0.2 add.
 
 ### WondrousTailsOdds
 

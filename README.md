@@ -11,6 +11,7 @@ GitHub Pages so they can be subscribed to from inside the game client.
 | --- | --- | --- |
 | [Bulk Desynth](./FF14/BulkDesynth) | `FF14/BulkDesynth` | `https://jdw-ss.github.io/gaming-tools/ff14/bulkdesynth/pluginmaster.json` |
 | [Wondrous Tails Odds](./FF14/WondrousTailsSolver) | `FF14/WondrousTailsSolver` | `https://jdw-ss.github.io/gaming-tools/ff14/wondroustailssolver/pluginmaster.json` |
+| [GC Supply Helper](./FF14/GcSupplyHelper) | `FF14/GcSupplyHelper` | `https://jdw-ss.github.io/gaming-tools/ff14/gcsupplyhelper/pluginmaster.json` |
 
 (The subscribe URL works once the GitHub Pages site has been enabled on
 this repository and the build workflow has run at least once — see
@@ -22,17 +23,22 @@ this repository and the build workflow has run at least once — see
 .
 ├── .github/workflows/
 │   ├── build-bulkdesynth.yml          CI: build + publish BulkDesynth on push
-│   └── build-wondroustailssolver.yml  CI: build + publish WondrousTailsSolver on push
+│   ├── build-wondroustailssolver.yml  CI: build + publish WondrousTailsOdds on push
+│   └── build-gcsupplyhelper.yml       CI: build + publish GcSupplyHelper on push
 ├── docs/                              Output: served by GitHub Pages
 │   ├── ff14/bulkdesynth/
 │   │   ├── latest.zip
 │   │   └── pluginmaster.json
-│   └── ff14/wondroustailssolver/
+│   ├── ff14/wondroustailssolver/
+│   │   ├── latest.zip
+│   │   └── pluginmaster.json
+│   └── ff14/gcsupplyhelper/
 │       ├── latest.zip
 │       └── pluginmaster.json
 └── FF14/
     ├── BulkDesynth/                   Source for the BulkDesynth plugin
-    └── WondrousTailsSolver/           Source for the WondrousTailsSolver plugin
+    ├── WondrousTailsSolver/           Source for the WondrousTailsOdds plugin
+    └── GcSupplyHelper/                Source for the GcSupplyHelper plugin
 ```
 
 The `docs/` folder is the GitHub Pages root. Each plugin gets a dedicated
@@ -61,3 +67,4 @@ See each plugin's own README for usage / commands / safety model:
 
 - [`FF14/BulkDesynth/README.md`](./FF14/BulkDesynth/README.md)
 - [`FF14/WondrousTailsSolver/README.md`](./FF14/WondrousTailsSolver/README.md)
+- [`FF14/GcSupplyHelper/README.md`](./FF14/GcSupplyHelper/README.md)

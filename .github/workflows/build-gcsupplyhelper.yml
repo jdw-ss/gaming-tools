@@ -1,0 +1,123 @@
+# Builds the GcSupplyHelper Dalamud plugin on ubuntu-latest whenever its
+# source changes, and commits the new zip + refreshed pluginmaster.json
+# into `docs/ff14/gcsupplyhelper/` so GitHub Pages serves it to subscribers.
+#
+# Subscribe URL (paste into Dalamud Settings -> Experimental -> Custom
+# Plugin Repositories):
+#   https://<owner>.github.io/<repo>/ff14/gcsupplyhelper/pluginmaster.json
+#
+# Mirrors `build-wondroustailssolver.yml`. Keep the workflows in sync
+# when bumping shared steps (e.g. dotnet SDK version, dalamud-distrib URL).
+
+name: Build GcSupplyHelper
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "FF14/GcSupplyHelper/**"
+      - ".github/workflows/build-gcsupplyhelper.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write # commits the rebuilt artifacts back to main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Read plugin AssemblyVersion
+        id: version
+        run: |
+          MANIFEST_PATH="FF14/GcSupplyHelper/GcSupplyHelper.json"
+          VERSION=$(jq -r '.AssemblyVersion' "$MANIFEST_PATH")
+          echo "assembly_version=$VERSION" >> $GITHUB_OUTPUT
+          SEMVER=$(echo "$VERSION" | awk -F. '{ printf "%s.%s.%s", $1, $2, $3 }')
+          echo "semver=$SEMVER" >> $GITHUB_OUTPUT
+          echo "GcSupplyHelper version: $VERSION (semver: $SEMVER)"
+
+      - name: Download Dalamud reference assemblies
+        run: |
+          mkdir -p FF14/GcSupplyHelper/.refs
+          # goatcorp/dalamud-distrib ships the same reference DLLs that
+          # XIVLauncher installs locally. `latest.zip` tracks Dalamud's
+          # release branch (matching DalamudApiLevel 15 currently).
+          curl -L -o /tmp/dalamud.zip https://goatcorp.github.io/dalamud-distrib/latest.zip
+          unzip -q /tmp/dalamud.zip -d FF14/GcSupplyHelper/.refs
+          test -f FF14/GcSupplyHelper/.refs/Dalamud.dll
+          test -f FF14/GcSupplyHelper/.refs/FFXIVClientStructs.dll
+          test -f FF14/GcSupplyHelper/.refs/Lumina.Excel.dll
+          test -f FF14/GcSupplyHelper/.refs/Dalamud.Bindings.ImGui.dll
+          echo "Dalamud refs extracted OK ($(ls FF14/GcSupplyHelper/.refs | wc -l) files)."
+
+      - name: Build (Release)
+        run: |
+          dotnet restore FF14/GcSupplyHelper/GcSupplyHelper.csproj
+          dotnet build FF14/GcSupplyHelper/GcSupplyHelper.csproj \
+            --configuration Release \
+            --no-restore
+
+      - name: Package zip
+        run: |
+          OUT_DIR="docs/ff14/gcsupplyhelper"
+          mkdir -p "$OUT_DIR"
+          cd FF14/GcSupplyHelper/bin/Release/net10.0-windows
+          rm -f "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip"
+          # No third-party runtime dependencies beyond what Dalamud
+          # bundles itself - the plugin uses only Dalamud-shipped
+          # assemblies.
+          zip -q "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip" \
+            GcSupplyHelper.dll \
+            GcSupplyHelper.json \
+            GcSupplyHelper.deps.json \
+            GcSupplyHelper.pdb
+          echo "Built zip contents:"
+          unzip -l "$GITHUB_WORKSPACE/$OUT_DIR/latest.zip"
+
+      - name: Refresh pluginmaster.json
+        env:
+          ASSEMBLY_VERSION: ${{ steps.version.outputs.assembly_version }}
+          OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          MANIFEST=$(cat FF14/GcSupplyHelper/GcSupplyHelper.json)
+          NOW=$(date +%s)
+          BASE_URL="https://${OWNER}.github.io/${REPO_NAME}/ff14/gcsupplyhelper"
+          DOWNLOAD_URL="${BASE_URL}/latest.zip"
+          jq -n --argjson m "$MANIFEST" --arg url "$DOWNLOAD_URL" --argjson now "$NOW" '[
+            ($m + {
+              Punchline: ($m.Punchline // "Today shopping list for GC daily turn-ins."),
+              DownloadLinkInstall: $url,
+              DownloadLinkUpdate: $url,
+              DownloadLinkTesting: $url,
+              DownloadCount: 0,
+              LastUpdate: $now,
+              IsHide: false,
+              IsTestingExclusive: false
+            })
+          ]' > docs/ff14/gcsupplyhelper/pluginmaster.json
+          echo "Refreshed pluginmaster.json:"
+          cat docs/ff14/gcsupplyhelper/pluginmaster.json
+
+      - name: Commit + push (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ff14/gcsupplyhelper/latest.zip docs/ff14/gcsupplyhelper/pluginmaster.json
+          if git diff --cached --quiet; then
+            echo "docs/ff14/gcsupplyhelper/ unchanged - skipping commit."
+            exit 0
+          fi
+          git commit -m "ci: rebuild GcSupplyHelper v${{ steps.version.outputs.semver }}" \
+            -m "Auto-built on ubuntu-latest by .github/workflows/build-gcsupplyhelper.yml. GitHub Pages will pick up the new zip on its next deploy cycle (usually under a minute)."
+          git push
