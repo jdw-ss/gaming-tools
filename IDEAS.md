@@ -41,10 +41,29 @@ This file is just "what might we do next, and when does it become urgent".
   (login, Timers, Personnel Officer), diff for stable item-ID
   offsets, document the layout in `Gaming Tools/CLAUDE.md`. Removes
   the "open Timers or Officer once per session" prerequisite entirely.
-- **Better vendor classification.** Currently `MaterialSource.Vendor`
-  is a weak heuristic (`ItemSearchCategory.RowId != 0`). Most missing
-  cases are GC seal shop items. Build an explicit
-  `Dictionary<itemId, MaterialSource>` from the GC-shop Lumina sheets.
+- **Better vendor / source classification.** Currently
+  `MaterialSource.Vendor` is a weak heuristic
+  (`ItemSearchCategory.RowId != 0`) AND it collapses three distinct
+  cases into one label:
+  - **Drop OR Bicolor** — most Dawntrail "vendor" items
+    (Gargantua Hide, Rroneek Fleece, etc.) are primarily mob drops
+    in their respective zones, with the Bicolor Gemstone trader as a
+    convenience shortcut. The vendor label is misleading because
+    retainer ventures, MB, and direct hunting are all viable.
+  - **Drop OR scrip exchange** — aethersands and similar high-end
+    refined materials. Scrip is convenience; primary source is
+    reduction of collectables.
+  - **Vendor only** — genuinely no other source (rare; usually
+    quest-locked vendor items).
+  Build an explicit per-leaf model with primary + secondary sources:
+  ```
+  MaterialSource Primary   // Gathered / Drop / Vendor / Scrip / Other
+  List<MaterialSource> SecondaryOptions  // e.g. [Vendor (Bicolor)]
+  string? PrimaryDetail    // mob name + zone, or vendor + currency
+  ```
+  Drop data lives in `MobDrops` Lumina sheets (or equivalent — verify
+  at build time). Scrip exchanges live in `GilShopItem` /
+  `SpecialShop` joined on shop owner.
 - **Surface intermediate crafts in the Per Mission tab.** v0.1
   flattens straight to leaves; the user mentioned wanting to gather
   raw materials, but seeing "you need 3 Bronze Ingots" between the
