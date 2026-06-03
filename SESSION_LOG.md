@@ -10,6 +10,58 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-03 — GcSupplyHelper v0.1.2: plan-route-on-web button + URL handoff to ffxiv-achievement-tracker
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending (this session)
+
+### Changed
+
+- **Architectural decision recorded as ADR-0002** (workspace-level, since the change spans gaming-tools and ffxiv-achievement-tracker): build the GC Supply route planner as a new static page on the achievement-tracker site, not as an in-game ImGui Route tab. Reasoning: visualisation is dramatically better in a web canvas, a second-monitor / phone surface beats alt-tabbing, the achievement tracker already has the Next.js + Firebase Hosting + Lumina-CSV-data-build pipeline.
+- **GcSupplyHelper v0.1.2**:
+  - New `Services/RouteUrlBuilder.cs` — encodes the aggregate as a versioned (`v: 1`) JSON document, base64-url-safe-encoded into the URL hash fragment. Public surface: `Build(string baseUrl, IEnumerable<MaterialRequirement>) → string`.
+  - `Plugin.cs` — new `WebsiteBaseUrl` constant pointing at `https://gaming-data-projects-491421.web.app`.
+  - `Windows/MainWindow.cs` — "Plan route on web ↗" button under the Aggregate table footer. Click → encode → `Dalamud.Utility.Util.OpenLink`. Includes a subdued explainer line.
+  - csproj `<Version>` 0.1.1 → 0.1.2, manifest `AssemblyVersion` 0.1.1.0 → 0.1.2.0, Description updated to mention the new feature.
+- **`ffxiv-achievement-tracker` site** (separate repo, separate commit):
+  - New `/gc-supply-route` static page at `app/gc-supply-route/{page.tsx, lib.ts}`.
+  - **Unauthenticated** (deviates from the site's `<AuthGate>` convention — documented in ADR-0002).
+  - Phase 1 page decodes the URL hash and displays the received item list with class chips. Phase 2 placeholder calls out what's coming.
+  - Suspense-wrapped (precautionary; we use `window.location.hash` not `useSearchParams`, but the wrap is cheap insurance for any future migration to query params).
+
+### Decisions
+
+- **Web over ImGui** — see ADR-0002 for the full reasoning. Short version: ImGui isn't a map-rendering tool, and the second-screen workflow is the natural shape of "shopping list there, game here".
+- **Unauthenticated page** — overrides the explore-agent's "match site convention" recommendation because the page reads only URL params and any auth gate would force a Google sign-in flow on every plugin click. Recorded as the explicit deviation in ADR-0002.
+- **Hash fragment over query string** — hash is never sent in HTTP requests so it stays out of Firebase Hosting access logs and referer headers. Functionally equivalent for our read-only handoff.
+- **Versioned wire format** (`v: 1`) — lets us evolve the payload (e.g. Phase 2 adding per-mission attribution rather than just per-leaf) while older plugin builds keep working as long as the page supports the older version.
+- **Phase 1 vs Phase 2 split** — Phase 1 ships the plumbing (verifies the round-trip end-to-end), Phase 2 ships the actual route logic + gathering-points data + map. Keeps the diff scoped and gets feedback on the wiring before investing in the algorithm.
+
+### Tried and abandoned
+
+- **`byte[]` in the C# wire format** — first cut of `RouteRequestItem.Classes` was `byte[]`. The round-trip scratch test caught it immediately: `System.Text.Json` serialises `byte[]` as a base64 string, not a JSON array of numbers. The TypeScript decoder expected `number[]` and rejected the payload. Fixed by switching the C# field to `int[]`. Caught at the contract level before either side shipped, exactly the point of the round-trip test.
+
+### Gotchas (added to `Gaming Tools/CLAUDE.md`)
+
+- `Dalamud.Utility.Util.OpenLink(url)` is the right wrapper for opening a URL in the user's default browser.
+- URL contract is versioned (`v: 1`), base64-url-safe-encoded, in the hash fragment.
+- `System.Text.Json` serialises `byte[]` as a base64 string. Use `int[]` if the receiving side expects `number[]`.
+- The achievement-tracker URL is hardcoded in `Plugin.cs`; bumps with the plugin if the site moves.
+
+### Open threads
+
+- **In-game smoke test pending** — user will install v0.1.2 once CI lands and verify the button opens the production URL with a populated item list.
+- **Phase 2 is the real work** — gathering-points data build (`scripts/build_master_from_lumina.ts` extension), route algorithm (zone clustering + TSP + ET schedule), map render. Filed in both repos' `IDEAS.md` as the lead follow-up.
+- **`UIState.GCSupply` reverse-engineering still v0.2 candidate #1** — unchanged from prior plan; v0.1.2 is a feature add, not a fix.
+
+### Verification (done in this session)
+
+- Plugin local build: clean Release, zero warnings, zero errors.
+- Round-trip scratch test: encode known aggregate in C#, decode in TypeScript via the actual `lib.ts` logic — 7/7 assertions pass (payload non-null, `v === 1`, item count, ids, qtys, classes for both items).
+- Achievement-tracker static export: `npm run build` green, `/gc-supply-route` shows up in the route list, `out/gc-supply-route/index.html` produced.
+
+---
+
 ## 2026-06-03 — GcSupplyHelper v0.1.1: catch-all addon hook + Timers hypothesis correction
 
 **Agent**: claude-opus-4-7

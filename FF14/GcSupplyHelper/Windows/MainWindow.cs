@@ -244,6 +244,22 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.EndTable();
+
+        // v0.1.2: plan-route-on-web handoff. Encodes the aggregate as a
+        // base64-url-safe JSON payload in a URL hash fragment and opens
+        // the ffxiv-achievement-tracker site's /gc-supply-route page in
+        // the default browser. See ADR-0002 for why this lives on the
+        // web rather than as an in-game ImGui Route tab.
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        if (ImGui.Button("Plan route on web \u2197"))
+        {
+            var url = RouteUrlBuilder.Build(Plugin.WebsiteBaseUrl, cachedAggregate);
+            Dalamud.Utility.Util.OpenLink(url);
+        }
+        ImGui.SameLine();
+        ImGui.TextDisabled("Opens the route planner in your default browser.");
     }
 
     private void DrawSettingsTab()

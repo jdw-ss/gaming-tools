@@ -33,6 +33,15 @@ public sealed class Plugin : IDalamudPlugin
 
     private const string CommandName = "/gcs";
 
+    /// <summary>
+    /// Production hostname of the `ffxiv-achievement-tracker` site,
+    /// where the route planner page lives at <c>/gc-supply-route</c>.
+    /// Hardcoded for v0.1.2; if the tracker ever moves to a custom
+    /// domain this bumps with the plugin. v0.1.3 idea: surface this in
+    /// Configuration so users can point at a local dev server.
+    /// </summary>
+    internal const string WebsiteBaseUrl = "https://gaming-data-projects-491421.web.app";
+
     private readonly Configuration config;
     private readonly SupplyMissionReader missionReader;
     private readonly LuminaRecipeDataSource dataSource;

@@ -104,6 +104,15 @@ The notes here document what we learned while integrating KamiToolKit. **Wondrou
 - **Renaming after first ship is cheap but not free.** AssemblyName + InternalName + manifest filename must all change together. The csproj `<None Update="*.json">` block, the `MANIFEST_PATH` and `MANIFEST=` cat in the CI workflow, and the zip step's file list all need updating. RootNamespace, source folder, csproj filename, and GH Pages subpath can stay (and did, for WondrousTailsOdds — the disconnect is purely cosmetic and documented in the relevant READMEs).
 - **`Plugin.Name` is user-facing**, distinct from `InternalName`. Keep them consistent in spirit so users searching the installer find what they expect, but they don't have to be byte-identical.
 
+### Plugin → web URL handoff (GcSupplyHelper v0.1.2)
+
+- **Use `Dalamud.Utility.Util.OpenLink(url)`** to open a URL in the user's default browser from a plugin button. It's the bundled wrapper around the platform's `Process.Start` shell-execute path; works on Wine and Windows-native installs without extra fuss.
+- **URL contract is versioned at the JSON level** (`{"v": 1, ...}`) and base64-url-safe-encoded into the URL **hash fragment** (`#r=<b64url>`), not a query string. Two small wins: hash fragments aren't sent to the server in HTTP requests, and they don't appear in Firebase Hosting access logs. Functionally equivalent for plugin → web read-only handoffs.
+- **`System.Text.Json` serialises `byte[]` as a base64 string**, not a JSON array of numbers. If the receiving end expects `number[]` (TypeScript), the C# wire-format field must be `int[]` (or `uint[]`), not `byte[]`. Caught by the v0.1.2 round-trip scratch test.
+- **The achievement-tracker URL is hardcoded** in `Plugin.cs` as `WebsiteBaseUrl`. If the tracker ever moves to a custom domain or different Firebase project, the constant needs bumping with the next plugin release. Filed as a v0.1.3 idea (Configuration override) in `IDEAS.md`.
+- **Web-side decoder lives at `ffxiv-achievement-tracker/app/gc-supply-route/lib.ts`**. The C# encoder + TS decoder share the same versioned contract (`v: 1`); the round-trip scratch test (`/tmp` test we ran during v0.1.2) verifies they agree on every field.
+- **See workspace ADR-0002** for the in-game-vs-web venue decision. The page is deliberately unauthenticated, breaking the achievement tracker's `<AuthGate>`-wraps-everything convention.
+
 ### Grand Company supply data surface (GcSupplyHelper v0.1)
 
 - **Authoritative read path**: `FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentGrandCompanySupply.Instance()->SupplyProvisioningData`. The pointer is null until the player has opened the **Grand Company Personnel Officer's Supply / Provisioning list** at least once in the session. Once non-null it stays valid until logout, even after the window is closed. **The Timers panel does NOT populate this agent** — empirically verified in v0.1.1 in-game testing. Timers renders the missions from `UIState.GCSupply` (the persistent buffer at offset `0x10D28`) without going through the agent at all.

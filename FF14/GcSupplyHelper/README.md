@@ -50,6 +50,21 @@ installer, and search for **GC Supply Helper** (or filter by author
 | --- | --- |
 | `/gcs` | Open or close the main window |
 
+## Route planner (v0.1.2+)
+
+The **Aggregate** tab carries a "Plan route on web ↗" button. Click it
+to hand the day's aggregate material list off to the route-planner
+page on the companion `ffxiv-achievement-tracker` site
+(`/gc-supply-route`). The page receives the data via a versioned,
+base64-url-safe-encoded payload in the URL hash fragment and opens in
+your default browser.
+
+v0.1.2 ships only the wiring — the page currently displays the item
+list it received from the plugin with class-attribution chips. The
+actual route algorithm (zone clustering, intra-zone ordering, ET
+windows for unspoiled nodes, map render) lands in v0.2 of the page.
+See workspace ADR-0002 for the architecture decision.
+
 ## Build locally
 
 See the monorepo [`README.md`](../../README.md) for the workspace

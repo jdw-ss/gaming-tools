@@ -76,33 +76,41 @@ This file is just "what might we do next, and when does it become urgent".
 - **Inventory comparison.** "You have 5 / need 14 Copper Ore" by
   cross-referencing `InventoryManager` (the same surface BulkDesynth
   uses). Likely the highest-value v0.2 add.
-- **v0.3+ Gathering route planner.** Surface a "Route" tab that turns
-  the aggregate shopping list into an ordered, zone-clustered,
-  ET-window-aware step sequence with "Drop map flag" / `/tp <nearest
-  aetheryte>` buttons per step. Building blocks:
-  - **Per-leaf metadata join**: `GatheringPoint` + `GatheringPointBase`
-    + `TerritoryType` for coords/zone/class/level; `GatheringPointTransient`
-    (or sibling) for unspoiled ET windows. Eager-built dictionary
-    keyed by leaf item id, same shape as the recipe table.
-  - **Zone clustering + intra-zone TSP**: group leaves by
-    territory + nearest aetheryte; within a zone of ≤8 leaves an
-    exhaustive shortest-path order is trivial (8! = 40,320), larger
-    zones get nearest-neighbour. Class-switches grouped so all
-    BTN-class leaves run consecutively before MIN, etc.
-  - **ET clock awareness**: compute Eorzea Time from
-    `Framework.GetServerTime()` (70 RL minutes = 1 ET day). For
-    unspoiled nodes, schedule entry by next-open-window OR display a
-    countdown so the player can fit standard nodes between windows.
-  - **Map flag + teleport**: Dalamud's map-flag API drops a marker at
-    coords with one call; teleport is `/tp <aetheryte>` via the
-    Teleporter plugin's chat command, not a direct reimplementation.
-  - **Display**: a Route tab with a checklist of steps; "currently
-    open / opens in N min" badges; per-step Map / Teleport buttons.
-    Real UI work; the algorithm itself is small.
-  - **Reference plugin**: GatherBuddy already solves the general case
-    (arbitrary item list → routes). Our value-add is the
-    GC-supply-context wrapping + cross-mission aggregation. Could
-    consider sharing data if GatherBuddy exposes IPC.
+- ~~**v0.3+ Gathering route planner — in-game ImGui tab.**~~ —
+  **superseded 2026-06-03 by ADR-0002**. After discussion, we built
+  the route planner as a static page on `ffxiv-achievement-tracker`
+  (Next.js) instead of an ImGui tab. v0.1.2 ships the plumbing (button
+  + URL handoff); see Phase 2 below for the algorithm work.
+- **Phase 2 of the web route planner.** v0.1.2 of the plugin + Phase 1
+  of `/gc-supply-route` ship only the wiring (decode URL → display
+  item list). Phase 2 needs:
+  - **Build-baked gathering-points data** in the achievement tracker's
+    `public/gathering-routes.json` — extend `scripts/build_master_from_lumina.ts`
+    with a `buildGatheringPoints()` step pulling from
+    xivapi/ffxiv-datamining CSVs (`GatheringPoint`, `GatheringPointBase`,
+    `GatheringPointTransient`, `Level`, `Map`, `TerritoryType`,
+    `PlaceName`, `GatheringType`, `Item`). The `Level → Map`
+    coordinate transform is the famously-fiddly bit; consider
+    Garland Tools JSON as a bootstrap if the Lumina CSV path is slow.
+  - **Item name + icon resolution** for the page — bake a small
+    `public/items-minimal.json` (id → name + iconId) from `Item.csv`
+    so the page can render real names instead of `Item #12345`.
+  - **Route algorithm** in TypeScript: zone clustering, intra-zone
+    TSP (exhaustive for ≤8 leaves, NN fallback), class-switch
+    grouping, ET-window scheduling. The algorithm itself is small
+    once the data shape is in place.
+  - **Map visualisation**: Leaflet over FFXIV map images, or SVG
+    with coordinate pins. Per-step "currently open / opens in N min"
+    badges using `setInterval` against the standard ET conversion
+    (70 RL minutes = 1 ET day).
+  - **Reference**: GatherBuddy solves the general case in-game; the
+    achievement tracker's Recipes-view materials panel
+    (`app/recipes/view/page.tsx`) is the closest existing pattern for
+    "decode a URL param + aggregate + render".
+- **v0.1.3 idea (low priority)**: surface `Plugin.WebsiteBaseUrl` in
+  `Configuration` so users can point at a local dev server (e.g.
+  `http://localhost:3000`) while iterating on the page. Default stays
+  the production URL.
 
 ### WondrousTailsOdds
 
