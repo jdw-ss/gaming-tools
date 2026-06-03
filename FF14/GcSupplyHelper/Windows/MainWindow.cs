@@ -216,9 +216,16 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.TextDisabled($"Combined shopping list across {cachedFilteredMissions.Count} mission(s)");
         ImGui.Spacing();
 
+        // Reserve vertical space below the table for the "Plan route on web" button.
+        // A ScrollY table with no outer_size eats every remaining pixel of the parent,
+        // which pushes the footer button off-screen — see GcSupplyHelper v0.1.3 fix.
+        var footerHeight = ImGui.GetFrameHeightWithSpacing()
+                           + ImGui.GetStyle().ItemSpacing.Y * 2f
+                           + 4f;
         if (!ImGui.BeginTable("##gcs-aggregate", 5,
                 ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH |
-                ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY))
+                ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY,
+                new Vector2(0f, -footerHeight)))
             return;
 
         ImGui.TableSetupColumn(string.Empty, ImGuiTableColumnFlags.WidthFixed, IconSize + 4f);

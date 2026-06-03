@@ -113,6 +113,12 @@ The notes here document what we learned while integrating KamiToolKit. **Wondrou
 - **Web-side decoder lives at `ffxiv-achievement-tracker/app/gc-supply-route/lib.ts`**. The C# encoder + TS decoder share the same versioned contract (`v: 1`); the round-trip scratch test (`/tmp` test we ran during v0.1.2) verifies they agree on every field.
 - **See workspace ADR-0002** for the in-game-vs-web venue decision. The page is deliberately unauthenticated, breaking the achievement tracker's `<AuthGate>`-wraps-everything convention.
 
+### ImGui table with footer button (GcSupplyHelper v0.1.3 fix)
+
+- **`ImGuiTableFlags.ScrollY` with no explicit `outer_size` consumes all remaining vertical space of the parent window.** Anything you intend to render *below* `ImGui.EndTable()` (a button, a separator, a status line) gets pushed off-screen and silently disappears. The v0.1.2 "Plan route on web" button was invisible for exactly this reason.
+- **Fix**: pass `new Vector2(0f, -footerHeight)` as `BeginTable`'s `outer_size` argument, with `footerHeight = ImGui.GetFrameHeightWithSpacing() + ImGui.GetStyle().ItemSpacing.Y * 2f + N` for whatever sits underneath. Negative Y in ImGui sizing means "leave this many pixels for the parent below me".
+- Diagnostic signal: the table fills the tab and runs straight to the bottom edge with no gap. If there's no footer gap, your footer is hiding under the scroll region.
+
 ### Grand Company supply data surface (GcSupplyHelper v0.1)
 
 - **Authoritative read path**: `FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentGrandCompanySupply.Instance()->SupplyProvisioningData`. The pointer is null until the player has opened the **Grand Company Personnel Officer's Supply / Provisioning list** at least once in the session. Once non-null it stays valid until logout, even after the window is closed. **The Timers panel does NOT populate this agent** — empirically verified in v0.1.1 in-game testing. Timers renders the missions from `UIState.GCSupply` (the persistent buffer at offset `0x10D28`) without going through the agent at all.

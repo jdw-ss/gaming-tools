@@ -10,6 +10,31 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-03 — GcSupplyHelper v0.1.3: fix invisible "Plan route on web" button
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending (this session)
+
+### Changed
+
+- `Windows/MainWindow.cs:DrawAggregateTab` — pass an explicit `outer_size` to `ImGui.BeginTable` reserving room for a footer (`new Vector2(0f, -footerHeight)` where `footerHeight = GetFrameHeightWithSpacing + 2 * ItemSpacing.Y + 4`). Without this the `ScrollY` flag caused the table to consume the entire remaining vertical area of the tab, pushing the v0.1.2 "Plan route on web ↗" button below the visible viewport.
+- csproj `<Version>` 0.1.2 → 0.1.3, manifest `AssemblyVersion` 0.1.2.0 → 0.1.3.0. No behavioural change beyond the layout fix.
+
+### Decisions
+
+- **Footer reservation over restructuring** — could have moved the button above the table, or dropped `ScrollY`, or wrapped in `BeginChild`. Reserving outer_size is the canonical ImGui pattern for "table + footer" and keeps the table behaviour identical (scroll when oversized, otherwise sized to content) while leaving the button visible.
+
+### Verification
+
+- `dotnet build -c Release` clean: 0 warnings, 0 errors, `bin/Release/net10.0-windows/GcSupplyHelper.dll` produced.
+- User reported the button absent on v0.1.2; root cause matched the `ScrollY`-without-`outer_size` ImGui gotcha exactly.
+
+### Gotchas surfaced (also added to `CLAUDE.md`)
+
+- **`ImGuiTableFlags.ScrollY` + no `outer_size` = table eats parent**. Anything you intended to render below the `EndTable()` ends up off-screen. Fix: pass `new Vector2(0f, -footerHeight)` as the outer_size, with `footerHeight = ImGui.GetFrameHeightWithSpacing() + ImGui.GetStyle().ItemSpacing.Y * 2 + N` for whatever sits underneath.
+
+---
+
 ## 2026-06-03 — GcSupplyHelper v0.1.2: plan-route-on-web button + URL handoff to ffxiv-achievement-tracker
 
 **Agent**: claude-opus-4-7

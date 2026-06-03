@@ -2,7 +2,7 @@
   "Author": "John Wilson (jdw-ss)",
   "Name": "GC Supply Helper",
   "InternalName": "GcSupplyHelper",
-  "AssemblyVersion": "0.1.2.0",
+  "AssemblyVersion": "0.1.3.0",
   "Description": "Computes the raw-material shopping list for FFXIV's daily Grand Company Supply and Provisioning missions. Reads today's 11 turn-ins (3 gatherers + 8 crafters), recursively expands each required item through the Lumina Recipe sheet down to gathered / vendor / drop leaves, and surfaces both a per-mission breakdown and a single aggregate list that calls out materials needed by multiple classes.\n\nv0.1.2 adds a \"Plan route on web\" button that hands the aggregate off to a companion route-planner page; v0.2 of that page will draw a real gathering route with zone clustering and ET-window timing.\n\nPopulates the moment you open the Grand Company Personnel Officer's Supply / Provisioning list once per session.\n\nUsage:\n  /gcs    - open / close the main window\n",
   "ApplicableVersion": "any",
   "Tags": [
