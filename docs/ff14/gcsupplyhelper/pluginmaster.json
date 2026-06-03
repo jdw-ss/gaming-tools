@@ -3,8 +3,8 @@
     "Author": "John Wilson (jdw-ss)",
     "Name": "GC Supply Helper",
     "InternalName": "GcSupplyHelper",
-    "AssemblyVersion": "0.1.0.0",
-    "Description": "Computes the raw-material shopping list for FFXIV's daily Grand Company Supply and Provisioning missions. Reads today's 11 turn-ins (3 gatherers + 8 crafters), recursively expands each required item through the Lumina Recipe sheet down to gathered / vendor / drop leaves, and surfaces both a per-mission breakdown and a single aggregate list that calls out materials needed by multiple classes.\n\nPopulates the moment you open either the in-game Timers panel (System → Online → Timers) or the Grand Company Personnel Officer's Supply List — whichever you reach first in your daily routine.\n\nUsage:\n  /gcs    - open / close the main window\n",
+    "AssemblyVersion": "0.1.1.0",
+    "Description": "Computes the raw-material shopping list for FFXIV's daily Grand Company Supply and Provisioning missions. Reads today's 11 turn-ins (3 gatherers + 8 crafters), recursively expands each required item through the Lumina Recipe sheet down to gathered / vendor / drop leaves, and surfaces both a per-mission breakdown and a single aggregate list that calls out materials needed by multiple classes.\n\nPopulates the moment you open the Grand Company Personnel Officer's Supply / Provisioning list once per session. v0.2 will read directly from the game's persistent supply buffer so even that single visit becomes unnecessary.\n\nUsage:\n  /gcs    - open / close the main window\n",
     "ApplicableVersion": "any",
     "Tags": [
       "grand company",
@@ -22,7 +22,7 @@
     "DownloadLinkUpdate": "https://jdw-ss.github.io/gaming-tools/ff14/gcsupplyhelper/latest.zip",
     "DownloadLinkTesting": "https://jdw-ss.github.io/gaming-tools/ff14/gcsupplyhelper/latest.zip",
     "DownloadCount": 0,
-    "LastUpdate": 1780428112,
+    "LastUpdate": 1780513449,
     "IsHide": false,
     "IsTestingExclusive": false
   }
