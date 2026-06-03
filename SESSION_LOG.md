@@ -10,6 +10,42 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-03 — GcSupplyHelper v0.1.1: catch-all addon hook + Timers hypothesis correction
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending (this session)
+
+### Changed
+
+- **Patch-day compatibility check first.** Dalamud has rebuilt to **15.0.2.0** after the latest game patch. API level is still 15 (assembly major version = API level by Dalamud convention), so all three plugin manifests' `DalamudApiLevel: 15` remain correct. Downloaded fresh refs and rebuilt all three plugins (BulkDesynth, WondrousTailsOdds, GcSupplyHelper) locally against the new Dalamud — all green, zero warnings. No code or manifest bumps required for patch-day compatibility; FFXIVClientStructs surface (every field, agent, method we reference) is stable.
+- **In-game test of v0.1.0 surfaced a real finding**: the Personnel Officer's Supply List populates the plugin as expected, but **the Timers panel does NOT**. Our Phase 1b research had speculated that opening Timers would side-effect-populate `AgentGrandCompanySupply` (on the reasoning that "the game has to fetch the data to render Timers"), but empirical testing falsifies that. Timers reads from `UIState.GCSupply` (offset `0x10D28`) directly, bypassing the agent. So no candidate addon name in our v0.1.0 guess list would ever have worked.
+- **v0.1.1 fix**: replaced the four-name candidate list in `Plugin.cs` (`GrandCompanySupplyList`, `ContentsInfo`, `ContentsInfoDetail`, `ContentsTimerSetting`) with **a single catch-all `PostSetup` listener**. `SupplyMissionReader.TryRefresh` already short-circuits on a null agent pointer, so the per-event cost is one comparison and a no-op return — trivially cheap. Catches the Personnel Officer path it always caught, plus any future addon that ever does populate the agent.
+- **Empty-state copy in `MainWindow.DrawEmptyState`** rewritten to match reality: Personnel Officer is the canonical trigger; the Timers panel is mentioned as a "shows the same data but doesn't populate the agent — see v0.2" footnote.
+- **Manifest `Description` updated** to drop the misleading "Timers OR Personnel Officer" framing.
+- **Versions bumped to 0.1.1** in both the `.csproj` `<Version>` and the manifest `AssemblyVersion`.
+
+### Decisions
+
+- **Catch-all listener over a fixed list.** v0.1.0's guess list was speculative; v0.1.1's catch-all is empirical. Strict improvement: no maintenance burden (no addon names to keep up-to-date), no false-negative risk (every addon's PostSetup gets a shot), no false-positive cost (null-pointer fast path in TryRefresh makes the no-op case ~one ns).
+- **Don't pursue the Timers addon name in code.** Even if we found it, hooking PostSetup on it wouldn't help — the agent isn't populated regardless. The Timers addon is just rendering from `UIState.GCSupply`. Knowing the addon name is irrelevant; only the UIState reverse-engineering (v0.2) bypasses the Personnel-Officer prerequisite.
+- **Promote `UIState.GCSupply` reverse-engineering to v0.2 lead item.** v0.1.0 filed it as one of several v0.2 candidates; v0.1.1's in-game evidence shows it's the *only* way to drop the Personnel Officer constraint, so it earns top billing in `IDEAS.md`.
+
+### Tried and abandoned
+
+- **Considered a v0.1.1 diagnostic mode that would log every `PostSetup` event so the user could identify the Timers addon name from `/xllog`.** Rejected once we realised the Timers addon name is irrelevant — Timers doesn't go through the agent at all, so even the right name wouldn't help.
+
+### Gotchas (`Gaming Tools/CLAUDE.md` updated)
+
+- The Timers panel does NOT populate `AgentGrandCompanySupply`. Only the Personnel Officer Supply / Provisioning list does. Phase 1b research's speculative claim to the contrary was wrong; v0.1.1 corrects the CLAUDE.md note.
+- Catch-all `IAddonLifecycle.RegisterListener(AddonEvent.PostSetup, handler)` (no addon-name argument) is the right pattern when the populating addon is unknown or fragmented — combined with a cheap null-check fast path in the handler, the cost is negligible.
+
+### Open threads
+
+- **v0.2 lead item**: reverse-engineer `UIState.GCSupply` (offset `0x10D28`, size `0x2C28`). Approach unchanged from the prior `IDEAS.md` entry; just promoted in priority.
+- **In-game smoke for v0.1.1 pending** (user will refresh subscribe repo + update plugin once CI publishes). Expected behaviour: identical to v0.1.0 — Personnel Officer populates, `/timers` does not. The catch-all is invisible to the user; the visible change is the corrected empty-state copy.
+
+---
+
 ## 2026-06-02 — Bootstrap GcSupplyHelper plugin (v0.1.0)
 
 **Agent**: claude-opus-4-7

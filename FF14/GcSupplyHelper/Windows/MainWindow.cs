@@ -317,8 +317,12 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.TextWrapped("Today's missions aren't loaded yet.");
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "Open the in-game Timers panel (System → Online → Timers) OR talk to your Grand Company Personnel Officer. " +
-            "Either one populates the plugin instantly.");
+            "Talk to your Grand Company Personnel Officer and open the Supply / Provisioning list. " +
+            "The plugin reads today's missions the moment that window opens, and caches them for the rest of the session.");
+        ImGui.Spacing();
+        ImGui.TextDisabled(
+            "(The in-game Timers panel shows the missions too, but it reads from a different memory buffer " +
+            "than the plugin uses. v0.2 will lift that constraint.)");
         ImGui.Spacing();
         if (ImGui.Button("Refresh now"))
             manualRefresh();

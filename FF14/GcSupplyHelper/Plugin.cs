@@ -33,25 +33,6 @@ public sealed class Plugin : IDalamudPlugin
 
     private const string CommandName = "/gcs";
 
-    /// <summary>
-    /// Addons whose PostSetup event is known (or strongly suspected) to
-    /// coincide with the game populating <c>AgentGrandCompanySupply
-    /// -&gt; SupplyProvisioningData</c>. The Personnel Officer's
-    /// <c>GrandCompanySupplyList</c> is confirmed; the Timers addon name
-    /// is one of the other three candidates and gets verified on first
-    /// in-game test per the plan's "Identify the Timers addon name" step.
-    /// All four listeners are registered — only the matching ones will
-    /// ever fire, and <see cref="SupplyMissionReader.TryRefresh"/> is
-    /// idempotent so multiple successful triggers are harmless.
-    /// </summary>
-    private static readonly string[] RefreshTriggerAddons =
-    [
-        "GrandCompanySupplyList",
-        "ContentsInfo",
-        "ContentsInfoDetail",
-        "ContentsTimerSetting",
-    ];
-
     private readonly Configuration config;
     private readonly SupplyMissionReader missionReader;
     private readonly LuminaRecipeDataSource dataSource;
@@ -83,8 +64,17 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi += OpenMain;
         PluginInterface.UiBuilder.OpenConfigUi += OpenMain;
 
-        foreach (var addonName in RefreshTriggerAddons)
-            AddonLifecycle.RegisterListener(AddonEvent.PostSetup, addonName, OnRefreshTriggerAddon);
+        // v0.1.0 registered listeners against a fixed candidate list
+        // (GrandCompanySupplyList + three guesses for the Timers panel).
+        // Empirical testing in-game confirmed that *only* the Personnel
+        // Officer's Supply List populates AgentGrandCompanySupply — the
+        // Timers panel renders from UIState.GCSupply directly without
+        // touching the agent. Rather than maintain a guess list, we
+        // register one catch-all PostSetup listener and rely on
+        // SupplyMissionReader.TryRefresh's null-check fast path
+        // (one pointer comparison per fired event). Cheap, future-proof,
+        // and catches any addon name we don't know about today.
+        AddonLifecycle.RegisterListener(AddonEvent.PostSetup, OnAnyAddonPostSetup);
 
         ClientState.Login += OnLogin;
         ClientState.Logout += OnLogout;
@@ -110,9 +100,12 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow.IsOpen = true;
     }
 
-    private void OnRefreshTriggerAddon(AddonEvent type, AddonArgs args)
+    private void OnAnyAddonPostSetup(AddonEvent type, AddonArgs args)
     {
         // Already on the framework thread (IAddonLifecycle guarantees it).
+        // TryRefresh short-circuits on a null agent pointer, so this is a
+        // no-op for addons that don't populate AgentGrandCompanySupply
+        // (i.e. nearly all of them). Successful triggers update the cache.
         if (missionReader.TryRefresh())
             mainWindow.InvalidateCache();
     }
@@ -145,8 +138,7 @@ public sealed class Plugin : IDalamudPlugin
             CommandManager.RemoveHandler(CommandName);
             ClientState.Login -= OnLogin;
             ClientState.Logout -= OnLogout;
-            foreach (var addonName in RefreshTriggerAddons)
-                AddonLifecycle.UnregisterListener(AddonEvent.PostSetup, addonName, OnRefreshTriggerAddon);
+            AddonLifecycle.UnregisterListener(AddonEvent.PostSetup, OnAnyAddonPostSetup);
 
             PluginInterface.UiBuilder.Draw -= windows.Draw;
             PluginInterface.UiBuilder.OpenMainUi -= OpenMain;

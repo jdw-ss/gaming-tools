@@ -26,21 +26,25 @@ This file is just "what might we do next, and when does it become urgent".
 
 ### GcSupplyHelper
 
-- **v0.1.1: identify the Timers panel's addon name and prune dead
-  candidates.** v0.1 registers `PostSetup` listeners against
-  `GrandCompanySupplyList` (confirmed Personnel Officer) plus three
-  Timers candidates (`ContentsInfo`, `ContentsInfoDetail`,
-  `ContentsTimerSetting`). First in-game smoke test adds a temporary
-  `Plugin.Log.Information("PostSetup: " + addonName)` line to capture
-  every addon event, identifies the real Timers addon, removes the
-  dead listeners + the log line in a one-shot v0.1.1 cleanup.
-- **v0.2: read `UIState.GCSupply` directly so the plugin works without
-  any UI interaction.** The buffer at offset `0x10D28` (size `0x2C28`)
-  is the persistent backing store; FFXIVClientStructs hasn't annotated
-  its layout. Approach: log the buffer pre-/post- known triggers
-  (login, Timers, Personnel Officer), diff for stable item-ID
-  offsets, document the layout in `Gaming Tools/CLAUDE.md`. Removes
-  the "open Timers or Officer once per session" prerequisite entirely.
+- ~~**v0.1.1: identify the Timers panel's addon name and prune dead
+  candidates.**~~ — **shipped 2026-06-03 as v0.1.1**, but the resolution
+  wasn't what we expected: in-game testing showed the Timers panel
+  doesn't populate `AgentGrandCompanySupply` at all (it renders from
+  `UIState.GCSupply` directly), so the Timers addon's *name* was
+  irrelevant. v0.1.1 replaced the four-name guess list with a single
+  catch-all `PostSetup` listener and corrected the empty-state copy.
+- **v0.2 lead item: read `UIState.GCSupply` directly so the plugin
+  works without any UI interaction.** The buffer at offset `0x10D28`
+  (size `0x2C28`) is the persistent backing store that the Timers
+  panel itself reads from; FFXIVClientStructs hasn't annotated its
+  layout. v0.1.1's in-game evidence promoted this from "nice to have"
+  to "the only way to drop the Personnel-Officer prerequisite".
+  Approach: log the buffer pre-/post- known triggers (login,
+  Personnel Officer open), diff for stable item-ID offsets that match
+  the agent's view, document the layout in `Gaming Tools/CLAUDE.md`.
+  The 11 item IDs should sit at a fixed offset in the buffer;
+  identifying them requires one Personnel-Officer-populated session to
+  get the ground-truth item IDs to search for.
 - **Better vendor / source classification.** Currently
   `MaterialSource.Vendor` is a weak heuristic
   (`ItemSearchCategory.RowId != 0`) AND it collapses three distinct

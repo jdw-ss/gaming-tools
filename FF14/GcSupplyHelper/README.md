@@ -17,16 +17,19 @@ For each game day it shows:
 
 ## Populating today's missions
 
-The plugin reads from the game's `AgentGrandCompanySupply` agent, which
-becomes available the moment **either** of these in-game UIs is opened:
+The plugin reads from the game's `AgentGrandCompanySupply` agent. That
+agent is null at login and becomes available the moment you open the
+**Grand Company Personnel Officer's Supply / Provisioning list** once
+per session. After that single visit, the plugin caches today's
+missions in memory and the data stays available for the rest of the
+session.
 
-- The **Timers panel** (System → Online → Timers → Next Mission Allowance)
-- The **Grand Company Personnel Officer's Supply / Provisioning list**
-
-Whichever you reach first in your daily routine works — the plugin
-caches today's missions in memory for the rest of the session. The
-window's empty state explains this if you open `/gcs` before either is
-visible.
+The in-game **Timers** panel (System → Online → Timers → Next Mission
+Allowance) also shows the same missions, but it reads them from a
+different memory buffer (`UIState.GCSupply`) that the agent doesn't
+mirror — so opening Timers doesn't populate the plugin. A v0.2
+ambition is to read `UIState.GCSupply` directly and drop the
+Personnel-Officer prerequisite entirely.
 
 ## Install
 
