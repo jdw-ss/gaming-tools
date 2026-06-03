@@ -46,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly SupplyMissionReader missionReader;
     private readonly LuminaRecipeDataSource dataSource;
     private readonly RecipeWalker walker;
+    private readonly InventoryReader inventoryReader;
     private readonly MainWindow mainWindow;
     private readonly WindowSystem windows = new("GcSupplyHelper");
 
@@ -58,12 +59,14 @@ public sealed class Plugin : IDalamudPlugin
         // Lambda wrap so the IPluginLog.Warning method-group's many
         // overloads don't collide with Action<string>'s signature.
         walker = new RecipeWalker(dataSource, msg => Log.Warning(msg));
+        inventoryReader = new InventoryReader(Log);
 
         mainWindow = new MainWindow(
             config,
             missionReader,
             dataSource,
             walker,
+            inventoryReader,
             TextureProvider,
             saveConfig: SaveConfig,
             manualRefresh: () => Framework.RunOnFrameworkThread(RefreshFromAnyTrigger));

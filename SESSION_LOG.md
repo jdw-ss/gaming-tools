@@ -10,6 +10,44 @@ When adding a new plugin to the monorepo, prefer one entry covering the whole bo
 
 <!-- New entries go directly below this line -->
 
+## 2026-06-03 — GcSupplyHelper v0.1.4: "Have" column + inventory export
+
+**Agent**: claude-opus-4-7
+**Branch**: main | **Commits**: pending (this session)
+
+### Changed
+
+- New `Services/InventoryReader.cs` — walks Inventory1..4, Crystals, SaddleBag1/2, and PremiumSaddleBag1/2 via `InventoryManager.Instance()->GetInventoryContainer(...)` and sums `Quantity` for the requested item id. Handles both the modern raw-id encoding and the legacy `rawId == itemId + 1_000_000` HQ encoding defensively. `IsLoaded` (property, not method) gates unloaded containers.
+- `Windows/MainWindow.cs:DrawAggregateTab` — new "Have" column between Qty and Source. Renders `have / need`, `have ✓` in green when complete, or dimmed `0`. Read happens once per frame via `InventoryReader.GetCounts(allItemIds)` — single container walk regardless of material count.
+- `Services/RouteUrlBuilder.cs` — new optional `haveByItemId` argument, third wire-format field `h` (omitted when 0 via `JsonIgnoreCondition.WhenWritingDefault`). Wire format stays `v: 1`; older plugin builds remain decodeable by the new page, and the new plugin's payloads stay decodeable by older page versions (extra field ignored).
+- `Plugin.cs` — instantiates `InventoryReader`, passes into `MainWindow`.
+- csproj `<Version>` 0.1.3 → 0.1.4, manifest `AssemblyVersion` 0.1.3.0 → 0.1.4.0, Description updated.
+
+### Decisions
+
+- **Bags + crystals + saddlebag, no retainers** — user-confirmed scope. Retainer inventory requires the retainer's data to be cached this session; complexity-to-value ratio doesn't justify v0.1.4. Filed as a v0.1.5 stretch.
+- **HQ + NQ summed** — user-confirmed. GC turn-ins accept either quality.
+- **Single container walk per frame, no across-frame cache** — read is cheap (~microseconds). Caching would complicate the live-update UX the user wanted ("Have updates as I pick stuff up").
+- **Wire format stays `v: 1`** — `h` is additive and optional. Bumping would force a hard cut-over and break older plugin builds; not worth it for a backwards-compatible field add.
+
+### Tried and abandoned
+
+- **`InventoryContainer.Loaded` as a field** — CS1061: doesn't exist. **`IsLoaded` is the correct member, and it's a property, not a method** — `IsLoaded()` got CS1955. Resolved with `!container->IsLoaded`.
+- **`InventoryManager->GetInventoryItemCount` as a one-shot** — saves a few lines but loses the per-container exclusion and the defensive HQ encoding handling. Walking explicitly is clearer.
+
+### Verification
+
+- `dotnet build -c Release` clean: 0 warnings, 0 errors.
+- Wire-format round-trip with `h` field: C# encoder produces base64url payload → TypeScript decoder via `decodeHashPayload` accepts and the page renders correct counts. Verified locally on `ffxiv-dev` (port 3100) with a synthetic 4-item fixture: incomplete rows sort to top by need-desc, complete rows sort to bottom with strikethrough, summary "N already covered" tracks correctly, +/- buttons accumulate correctly across rapid clicks (after the functional-updater fix).
+- `npm run build` on the achievement tracker green; `/gc-supply-route` static-exports.
+
+### Gotchas surfaced (also added to `CLAUDE.md`)
+
+- **`InventoryContainer.IsLoaded` is a property, not a method.** Drop the parens.
+- **Functional updaters matter for +/- steppers driven by absolute `value` props.** Rapid clicks all read the same stale `value` from the render closure, so 9 clicks collapse to a single increment. Emit deltas to a parent that uses `setState(prev => ...)` instead.
+
+---
+
 ## 2026-06-03 — GcSupplyHelper v0.1.3: fix invisible "Plan route on web" button
 
 **Agent**: claude-opus-4-7

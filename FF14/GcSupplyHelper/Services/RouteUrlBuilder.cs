@@ -20,13 +20,19 @@ namespace GcSupplyHelper.Services;
 /// {
 ///   "v": 1,
 ///   "items": [
-///     { "id": 12345, "qty": 14, "c": [9, 10, 11] },
+///     { "id": 12345, "qty": 14, "c": [9, 10, 11], "h": 3 },
 ///     ...
 ///   ]
 /// }
 /// </code>
 /// where <c>id</c> is the Lumina Item RowId, <c>qty</c> the aggregate
-/// quantity, and <c>c</c> the ClassJob row ids that contributed to it.
+/// quantity, <c>c</c> the ClassJob row ids that contributed to it, and
+/// <c>h</c> (added in v0.1.4, optional, default 0) the count already
+/// present in the player's inventory at the moment the URL was built.
+/// The TypeScript decoder treats <c>h</c> as optional and falls back
+/// to 0 when it's missing or zero (the JSON encoder omits zero values
+/// via <see cref="JsonIgnoreCondition.WhenWritingDefault"/> to keep the
+/// URL compact when the player has nothing on hand).
 ///
 /// The hash fragment is chosen over a query string for two small wins:
 /// hash fragments don't get sent to the server in HTTP requests (no
@@ -48,11 +54,18 @@ internal static class RouteUrlBuilder
     };
 
     /// <summary>
-    /// Build the route-planner URL from an aggregate. Items with no
-    /// contributing classes (defensive — shouldn't happen given how
-    /// the aggregate is built) are dropped.
+    /// Build the route-planner URL from an aggregate plus an optional
+    /// snapshot of how many of each item the player already has on hand
+    /// (used by the web page as the starting value of its editable Have
+    /// column). Items with no contributing classes (defensive — shouldn't
+    /// happen given how the aggregate is built) are dropped. Zero have-
+    /// counts are encoded as a missing field, not <c>"h": 0</c>, to keep
+    /// the URL short for fresh starts.
     /// </summary>
-    public static string Build(string baseUrl, IEnumerable<MaterialRequirement> aggregate)
+    public static string Build(
+        string baseUrl,
+        IEnumerable<MaterialRequirement> aggregate,
+        IReadOnlyDictionary<uint, int>? haveByItemId = null)
     {
         var payload = new RouteRequest
         {
@@ -68,6 +81,9 @@ internal static class RouteUrlBuilder
                     // decoder's `number[]` contract. int is fine — ClassJob
                     // IDs fit easily.
                     Classes = m.NeededByClassJobs.OrderBy(c => c).Select(c => (int)c).ToArray(),
+                    Have = haveByItemId is not null && haveByItemId.TryGetValue(m.ItemId, out var h)
+                        ? h
+                        : 0,
                 })
                 .ToArray(),
         };
@@ -101,4 +117,12 @@ internal sealed class RouteRequestItem
     [JsonPropertyName("id")] public uint Id { get; set; }
     [JsonPropertyName("qty")] public int Qty { get; set; }
     [JsonPropertyName("c")] public int[] Classes { get; set; } = [];
+
+    /// <summary>
+    /// HQ + NQ inventory snapshot at the moment the URL was built (see
+    /// <see cref="InventoryReader"/>). Omitted from the wire JSON when 0
+    /// via <see cref="JsonIgnoreCondition.WhenWritingDefault"/>, so fresh
+    /// runs don't pay for the field.
+    /// </summary>
+    [JsonPropertyName("h")] public int Have { get; set; }
 }

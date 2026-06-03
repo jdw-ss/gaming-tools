@@ -59,11 +59,25 @@ page on the companion `ffxiv-achievement-tracker` site
 base64-url-safe-encoded payload in the URL hash fragment and opens in
 your default browser.
 
-v0.1.2 ships only the wiring — the page currently displays the item
-list it received from the plugin with class-attribution chips. The
-actual route algorithm (zone clustering, intra-zone ordering, ET
-windows for unspoiled nodes, map render) lands in v0.2 of the page.
-See workspace ADR-0002 for the architecture decision.
+The web page now renders real item names + icons and offers an editable
+**Have** column so you can tick materials off as you gather them.
+Progress is saved in the browser's local storage keyed by the daily
+mission set — tomorrow's missions start fresh.
+
+The actual route algorithm (zone clustering, intra-zone ordering, ET
+windows for unspoiled nodes, map render) lands in Phase 2b of the
+page. See workspace ADR-0002 for the architecture decision.
+
+## "Have" column (v0.1.4+)
+
+The Aggregate tab includes a **Have** column showing how many of each
+material are already in your bags, crystal pouch, and saddlebag
+(standard + premium). HQ and NQ counts are summed because Grand
+Company turn-ins accept either quality. The same counts are exported
+to the route-planner web page as the starting value of its editable
+progress column.
+
+Retainer bellies aren't included in v0.1.4 — that's a v0.1.5 stretch.
 
 ## Build locally
 

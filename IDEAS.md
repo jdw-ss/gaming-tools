@@ -73,28 +73,39 @@ This file is just "what might we do next, and when does it become urgent".
   raw materials, but seeing "you need 3 Bronze Ingots" between the
   turn-in and its leaf ingredients could help users who craft along
   the way. Could be a per-tab toggle.
-- **Inventory comparison.** "You have 5 / need 14 Copper Ore" by
+- ~~**Inventory comparison.** "You have 5 / need 14 Copper Ore" by
   cross-referencing `InventoryManager` (the same surface BulkDesynth
-  uses). Likely the highest-value v0.2 add.
+  uses). Likely the highest-value v0.2 add.~~ — **shipped 2026-06-03 as
+  v0.1.4.** New "Have" column on the Aggregate tab covers bags +
+  crystal pouch + saddlebag (standard + premium), HQ + NQ summed. Same
+  counts are exported to the web page as the starting value of its
+  editable progress column. Retainer-belly inclusion remains a v0.1.5
+  stretch — requires the retainer's data to be cached this session
+  (i.e. user has visited a Summoning Bell).
 - ~~**v0.3+ Gathering route planner — in-game ImGui tab.**~~ —
   **superseded 2026-06-03 by ADR-0002**. After discussion, we built
   the route planner as a static page on `ffxiv-achievement-tracker`
   (Next.js) instead of an ImGui tab. v0.1.2 ships the plumbing (button
   + URL handoff); see Phase 2 below for the algorithm work.
-- **Phase 2 of the web route planner.** v0.1.2 of the plugin + Phase 1
-  of `/gc-supply-route` ship only the wiring (decode URL → display
-  item list). Phase 2 needs:
-  - **Build-baked gathering-points data** in the achievement tracker's
-    `public/gathering-routes.json` — extend `scripts/build_master_from_lumina.ts`
-    with a `buildGatheringPoints()` step pulling from
-    xivapi/ffxiv-datamining CSVs (`GatheringPoint`, `GatheringPointBase`,
+- **Phase 2a of the web route planner — shipped 2026-06-03.**
+  - ✅ Item name + icon resolution via `public/items-minimal.json`
+    (id → name + iconId, baked from `Item.csv`, ~554 KB gzipped).
+  - ✅ Plugin "Have" column + URL export (`h` field on the wire,
+    optional, decoded on the page).
+  - ✅ Editable Have column on the web with strikethrough on
+    complete, sort-to-bottom for done rows, localStorage persistence
+    keyed by `payloadStorageKey(items)` (FNV-1a over the sorted item-
+    id set).
+- **Phase 2b of the web route planner — the actual route.**
+  - **Build-baked gathering-points data** in the achievement
+    tracker's `public/gathering-routes.json` — extend
+    `scripts/build_master_from_lumina.ts` with a
+    `buildGatheringPoints()` step pulling from xivapi/ffxiv-datamining
+    CSVs (`GatheringPoint`, `GatheringPointBase`,
     `GatheringPointTransient`, `Level`, `Map`, `TerritoryType`,
     `PlaceName`, `GatheringType`, `Item`). The `Level → Map`
     coordinate transform is the famously-fiddly bit; consider
     Garland Tools JSON as a bootstrap if the Lumina CSV path is slow.
-  - **Item name + icon resolution** for the page — bake a small
-    `public/items-minimal.json` (id → name + iconId) from `Item.csv`
-    so the page can render real names instead of `Item #12345`.
   - **Route algorithm** in TypeScript: zone clustering, intra-zone
     TSP (exhaustive for ≤8 leaves, NN fallback), class-switch
     grouping, ET-window scheduling. The algorithm itself is small

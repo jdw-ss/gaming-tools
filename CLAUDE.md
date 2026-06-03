@@ -113,6 +113,14 @@ The notes here document what we learned while integrating KamiToolKit. **Wondrou
 - **Web-side decoder lives at `ffxiv-achievement-tracker/app/gc-supply-route/lib.ts`**. The C# encoder + TS decoder share the same versioned contract (`v: 1`); the round-trip scratch test (`/tmp` test we ran during v0.1.2) verifies they agree on every field.
 - **See workspace ADR-0002** for the in-game-vs-web venue decision. The page is deliberately unauthenticated, breaking the achievement tracker's `<AuthGate>`-wraps-everything convention.
 
+### Inventory reads (GcSupplyHelper v0.1.4)
+
+- **`InventoryContainer.IsLoaded` is a property, not a method.** `if (!container->IsLoaded())` fails with CS1955 "Non-invocable member"; drop the parens: `if (!container->IsLoaded) continue;`. Same shape applies to most FFXIVClientStructs `Is*` accessors.
+- **HQ encoding is dual.** Modern FFXIVClientStructs stores `InventoryItem.ItemId` as the raw base item id; older versions added `+1_000_000` for HQ. Match both forms (`rawId == itemId || rawId == itemId + HqOffset`) so the plugin survives a binding-version bump.
+- **`InventoryContainer.Size` is the slot count, not the populated count.** Walk `0..Size`; slots with `ItemId == 0` are empty and harmless to read.
+- **`InventoryManager.GetInventoryItemCount` is the convenience wrapper.** Pros: less code. Cons: HQ counts via a separate `isHq: true` invocation (call twice + sum), the saddlebag isn't included, and the legacy HQ encoding isn't surfaced. Walking containers explicitly via `GetInventoryContainer(InventoryType.X)` is more flexible.
+- **Saddlebag containers report `IsLoaded == false` until the player interacts with them this session** (or always, for accounts without the Companion App subscription on the premium slots). Silently skip.
+
 ### ImGui table with footer button (GcSupplyHelper v0.1.3 fix)
 
 - **`ImGuiTableFlags.ScrollY` with no explicit `outer_size` consumes all remaining vertical space of the parent window.** Anything you intend to render *below* `ImGui.EndTable()` (a button, a separator, a status line) gets pushed off-screen and silently disappears. The v0.1.2 "Plan route on web" button was invisible for exactly this reason.

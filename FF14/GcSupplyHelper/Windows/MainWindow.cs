@@ -56,6 +56,7 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly SupplyMissionReader missionReader;
     private readonly IRecipeDataSource dataSource;
     private readonly RecipeWalker walker;
+    private readonly InventoryReader inventoryReader;
     private readonly ITextureProvider textureProvider;
     private readonly Action saveConfig;
     private readonly Action manualRefresh;
@@ -72,6 +73,7 @@ internal sealed class MainWindow : Window, IDisposable
         SupplyMissionReader missionReader,
         IRecipeDataSource dataSource,
         RecipeWalker walker,
+        InventoryReader inventoryReader,
         ITextureProvider textureProvider,
         Action saveConfig,
         Action manualRefresh)
@@ -82,6 +84,7 @@ internal sealed class MainWindow : Window, IDisposable
         this.missionReader = missionReader;
         this.dataSource = dataSource;
         this.walker = walker;
+        this.inventoryReader = inventoryReader;
         this.textureProvider = textureProvider;
         this.saveConfig = saveConfig;
         this.manualRefresh = manualRefresh;
@@ -222,7 +225,7 @@ internal sealed class MainWindow : Window, IDisposable
         var footerHeight = ImGui.GetFrameHeightWithSpacing()
                            + ImGui.GetStyle().ItemSpacing.Y * 2f
                            + 4f;
-        if (!ImGui.BeginTable("##gcs-aggregate", 5,
+        if (!ImGui.BeginTable("##gcs-aggregate", 6,
                 ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH |
                 ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY,
                 new Vector2(0f, -footerHeight)))
@@ -231,9 +234,16 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.TableSetupColumn(string.Empty, ImGuiTableColumnFlags.WidthFixed, IconSize + 4f);
         ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch, 2.5f);
         ImGui.TableSetupColumn("Qty", ImGuiTableColumnFlags.WidthFixed, 50f);
+        ImGui.TableSetupColumn("Have", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("Source", ImGuiTableColumnFlags.WidthFixed, 80f);
         ImGui.TableSetupColumn("Needed by", ImGuiTableColumnFlags.WidthStretch, 2.0f);
         ImGui.TableHeadersRow();
+
+        // Read every inventory count in a single container walk rather
+        // than calling GetCount(id) per material per frame. Cheap and
+        // keeps the displayed counts coherent.
+        var aggregateIds = cachedAggregate.Select(m => m.ItemId).ToArray();
+        var haveByItemId = inventoryReader.GetCounts(aggregateIds);
 
         foreach (var material in cachedAggregate)
         {
@@ -244,6 +254,8 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.TextUnformatted(material.ItemName);
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(material.Quantity.ToString());
+            ImGui.TableNextColumn();
+            DrawHaveCell(haveByItemId.GetValueOrDefault(material.ItemId, 0), material.Quantity);
             ImGui.TableNextColumn();
             DrawSourceLabel(material.Source);
             ImGui.TableNextColumn();
@@ -262,7 +274,11 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         if (ImGui.Button("Plan route on web \u2197"))
         {
-            var url = RouteUrlBuilder.Build(Plugin.WebsiteBaseUrl, cachedAggregate);
+            // Re-read inventory at click time so the URL carries the
+            // freshest snapshot, not the one captured when the table
+            // was last drawn. Cheap; same container walk as above.
+            var have = inventoryReader.GetCounts(cachedAggregate.Select(m => m.ItemId).ToArray());
+            var url = RouteUrlBuilder.Build(Plugin.WebsiteBaseUrl, cachedAggregate, have);
             Dalamud.Utility.Util.OpenLink(url);
         }
         ImGui.SameLine();
@@ -384,6 +400,29 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.Image(wrap.Handle, new Vector2(IconSize, IconSize));
         else
             ImGui.Dummy(new Vector2(IconSize, IconSize));
+    }
+
+    /// <summary>
+    /// Render the Aggregate-tab "Have" cell as <c>have / need</c>. Cell
+    /// turns green and gains a checkmark once the player has enough to
+    /// turn in. Mirrors the same threshold logic the web page uses for
+    /// its strikethrough row state — keeping the in-game and web reads
+    /// consistent.
+    /// </summary>
+    private static void DrawHaveCell(int have, int needed)
+    {
+        if (have >= needed)
+        {
+            ImGui.TextColored(ColorGathered, $"{have} \u2713");
+        }
+        else if (have > 0)
+        {
+            ImGui.TextUnformatted($"{have} / {needed}");
+        }
+        else
+        {
+            ImGui.TextDisabled("0");
+        }
     }
 
     private static void DrawSourceLabel(MaterialSource source)
