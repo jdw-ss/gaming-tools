@@ -96,28 +96,45 @@ This file is just "what might we do next, and when does it become urgent".
     complete, sort-to-bottom for done rows, localStorage persistence
     keyed by `payloadStorageKey(items)` (FNV-1a over the sorted item-
     id set).
-- **Phase 2b of the web route planner — the actual route.**
-  - **Build-baked gathering-points data** in the achievement
-    tracker's `public/gathering-routes.json` — extend
-    `scripts/build_master_from_lumina.ts` with a
-    `buildGatheringPoints()` step pulling from xivapi/ffxiv-datamining
-    CSVs (`GatheringPoint`, `GatheringPointBase`,
-    `GatheringPointTransient`, `Level`, `Map`, `TerritoryType`,
-    `PlaceName`, `GatheringType`, `Item`). The `Level → Map`
-    coordinate transform is the famously-fiddly bit; consider
-    Garland Tools JSON as a bootstrap if the Lumina CSV path is slow.
-  - **Route algorithm** in TypeScript: zone clustering, intra-zone
-    TSP (exhaustive for ≤8 leaves, NN fallback), class-switch
-    grouping, ET-window scheduling. The algorithm itself is small
-    once the data shape is in place.
-  - **Map visualisation**: Leaflet over FFXIV map images, or SVG
-    with coordinate pins. Per-step "currently open / opens in N min"
-    badges using `setInterval` against the standard ET conversion
-    (70 RL minutes = 1 ET day).
+- **Phase 2b.1 of the web route planner — shipped 2026-06-08.**
+  - ✅ `public/gathering-points.json` baked by `buildGatheringPoints()`
+    via the chain `GatheringItem → GatheringPointBase → GatheringPoint
+    → TerritoryType → PlaceName` plus `GatheringPointTransient →
+    GatheringRarePopTimeTable` for unspoiled ET windows. 1056 items,
+    1311 nodes, ~7 KB gzipped.
+  - ✅ Page shows zone + job + node level inline under each material
+    name, with a live ET-countdown badge for unspoiled nodes and an
+    `▼ alternates (N)` disclosure for the other locations.
+  - ✅ "By material" / "By zone" view-mode toggle persisted in
+    localStorage. Zone view buckets materials per-zone with an
+    outstanding-need counter and a `🛒 Other` catch-all for non-
+    gathered items.
+  - ✅ FSH items render a `🐟 Fishing locations coming soon` pill.
+  - ❌ Coords + map deferred to Phase 2b.2 (Level→GP join is sparse;
+    coord transform is fiddly — worth solving once when there's a map
+    to put the pins on).
+- **Phase 2b.2 of the web route planner — pinpoint coords + map.**
+  - **Pinpoint coords**: walk `Level.csv` filtered to `Type == 9`
+    (gathering), key by `Level.Object == GatheringPoint.RowId`, apply
+    the `Level → Map` coord transform:
+    `mapCoord = ((41 / (Map.SizeFactor / 100)) * ((rawCoord + Map.OffsetX) / 2048)) + 1`.
+    Cross-check 3 items against Garland Tools before committing.
+  - **Leaflet map per zone** via `react-leaflet` over FFXIV map images
+    served from xivapi.com `/m/{territoryId}/{mapNumber}.jpg`. CSS
+    import order matters for static export.
+  - **Route algorithm** in TypeScript: intra-zone TSP (exhaustive ≤8
+    nodes, NN fallback), class-switch grouping (BTN nodes consecutive,
+    then MIN nodes), ET-window scheduling.
   - **Reference**: GatherBuddy solves the general case in-game; the
     achievement tracker's Recipes-view materials panel
     (`app/recipes/view/page.tsx`) is the closest existing pattern for
     "decode a URL param + aggregate + render".
+- **Phase 2b.3 of the web route planner — FSH support.**
+  - Different data shape (`FishingSpot`, `FishParameter`,
+    `GatheringSubCategory`) — fish are keyed by FishParameter rather
+    than GatheringItem, and many require specific bait + weather + ET.
+  - Spearfishing (`SpearfishingItem`, `SpearfishingNotebook`) is a
+    further sub-system.
 - **v0.1.3 idea (low priority)**: surface `Plugin.WebsiteBaseUrl` in
   `Configuration` so users can point at a local dev server (e.g.
   `http://localhost:3000`) while iterating on the page. Default stays
